@@ -1,0 +1,45 @@
+---
+- name: Update apt cache and upgrade all packages
+  apt:
+    upgrade: dist
+    update_cache: yes
+    cache_valid_time: 3600
+
+- name: Install essential tools
+  apt:
+    name:
+      - curl
+      - htop
+      - vim
+      - unzip
+      - qemu-guest-agent
+      - bridge-utils
+    state: present
+
+- name: Disable SWAP (K8s requirement)
+  command: swapoff -a
+  when: "ansible_facts['swaptotal_mb'] > 0"
+
+- name: Remove SWAP from /etc/fstab
+  replace:
+    path: /etc/fstab
+    regexp: '^([^#].*?\sswap\s+sw\s+.*)$'
+    replace: '# \1'
+
+- name: Enable kernel modules for K3s/Cilium
+  modprobe:
+    name: "{{ item }}"
+    state: present
+  loop:
+    - br_netfilter
+    - overlay
+
+- name: Set sysctl parameters for networking
+  sysctl:
+    name: "{{ item.name }}"
+    value: "{{ item.value }}"
+    state: present
+  loop:
+    - { name: 'net.bridge.bridge-nf-call-iptables', value: '1' }
+    - { name: 'net.bridge.bridge-nf-call-ip6tables', value: '1' }
+    - { name: 'net.ipv4.ip_forward', value: '1' }

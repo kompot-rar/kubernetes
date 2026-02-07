@@ -1,0 +1,72 @@
+---
+- name: Set system hostname
+  hostname:
+    name: "{{ inventory_hostname }}"
+
+- name: Check if K3s binary exists
+  stat:
+    path: /usr/local/bin/k3s
+  register: k3s_installed
+
+- name: Check for K3s Agent uninstall script
+  stat:
+    path: /usr/local/bin/k3s-agent-uninstall.sh
+  register: k3s_agent_uninstall_script
+
+- name: Uninstall K3s Agent (Clean up before promoting to Master)
+  command: /usr/local/bin/k3s-agent-uninstall.sh
+  when: k3s_agent_uninstall_script.stat.exists
+
+- name: Install K3s on First Master (Init)
+  shell: >
+    curl -sfL https://get.k3s.io | K3S_TOKEN="{{ k3s_token }}" sh -s - server 
+    --cluster-init 
+    --tls-san {{ virtual_ip }}
+    --node-name {{ inventory_hostname }}
+    --disable traefik
+  args:
+    creates: /var/lib/rancher/k3s/server/node-token
+  when: 
+    - inventory_hostname == "k3s-master-0"
+
+- name: Wait for First Master to be ready
+  wait_for:
+    host: "{{ hostvars['k3s-master-0']['ansible_host'] }}"
+    port: 6443
+    delay: 5
+    timeout: 300
+  when: inventory_hostname == "k3s-master-0"
+
+- name: Join remaining Masters to Cluster
+  shell: >
+    curl -sfL https://get.k3s.io | K3S_TOKEN="{{ k3s_token }}" sh -s - server 
+    --server https://{{ hostvars['k3s-master-0']['ansible_host'] }}:6443 
+    --tls-san {{ virtual_ip }}
+    --node-name {{ inventory_hostname }}
+    --disable traefik
+  # Removing 'creates' allows reconfiguration, but keeps it idempotent enough
+  when: 
+    - inventory_hostname != "k3s-master-0"
+
+- name: Wait for node to register in Kubernetes
+  command: /usr/local/bin/kubectl get node {{ inventory_hostname }}
+  delegate_to: k3s-master-0
+  register: node_check
+  until: node_check.rc == 0
+  retries: 30
+  delay: 10
+  when: inventory_hostname != "k3s-master-0"
+
+- name: Label remaining nodes as Masters
+  command: >
+    /usr/local/bin/kubectl label node {{ inventory_hostname }} 
+    node-role.kubernetes.io/master=true 
+    node-role.kubernetes.io/control-plane=true 
+    --overwrite
+  delegate_to: k3s-master-0
+  register: label_result
+  until: label_result.rc == 0
+  retries: 10
+  delay: 5
+  when: 
+    - inventory_hostname != "k3s-master-0"

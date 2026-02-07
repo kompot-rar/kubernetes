@@ -1,0 +1,39 @@
+---
+- hosts: all
+  become: yes
+  tasks:
+    - name: Check for K3s Server uninstall script
+      stat:
+        path: /usr/local/bin/k3s-uninstall.sh
+      register: k3s_server_uninstall
+
+    - name: Uninstall K3s Server
+      command: /usr/local/bin/k3s-uninstall.sh
+      when: k3s_server_uninstall.stat.exists
+      ignore_errors: yes
+
+    - name: Check for K3s Agent uninstall script
+      stat:
+        path: /usr/local/bin/k3s-agent-uninstall.sh
+      register: k3s_agent_uninstall
+
+    - name: Uninstall K3s Agent
+      command: /usr/local/bin/k3s-agent-uninstall.sh
+      when: k3s_agent_uninstall.stat.exists
+      ignore_errors: yes
+
+    - name: Kill any remaining k3s processes
+      shell: "pkill -9 -f k3s || true"
+      ignore_errors: yes
+
+    - name: Cleanup K3s directories (Data & Config)
+      file:
+        path: "{{ item }}"
+        state: absent
+      loop:
+        - /var/lib/rancher
+        - /etc/rancher
+        - /var/lib/kubelet
+        - /etc/kubernetes
+        - /run/k3s
+        - /run/flannel

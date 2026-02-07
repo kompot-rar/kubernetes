@@ -1,0 +1,73 @@
+---
+- name: Ensure K3s manifests directory exists
+  file:
+    path: /var/lib/rancher/k3s/server/manifests
+    state: directory
+    mode: '0755'
+
+- name: Deploy Kube-VIP Manifest
+  copy:
+    dest: /var/lib/rancher/k3s/server/manifests/kube-vip.yaml
+    mode: '0644'
+    content: |
+      apiVersion: v1
+      kind: Pod
+      metadata:
+        creationTimestamp: null
+        name: kube-vip
+        namespace: kube-system
+      spec:
+        hostAliases:
+        - ip: "127.0.0.1"
+          hostnames:
+          - "kubernetes"
+        containers:
+        - args:
+          - manager
+          env:
+          - name: vip_arp
+            value: "true"
+          - name: port
+            value: "6443"
+          - name: vip_interface
+            value: "{{ ansible_default_ipv4.interface | default('eth0') }}"
+          - name: vip_cidr
+            value: "32"
+          - name: cp_enable
+            value: "true"
+          - name: cp_namespace
+            value: "kube-system"
+          - name: vip_ddns
+            value: "false"
+          - name: vip_leaderelection
+            value: "true"
+          - name: vip_leaseduration
+            value: "5"
+          - name: vip_renewdeadline
+            value: "3"
+          - name: vip_retryperiod
+            value: "1"
+          - name: address
+            value: "{{ virtual_ip }}"
+          - name: prometheus_server
+            value: ":2112"
+          - name: KUBECONFIG
+            value: "/etc/kubernetes/admin.conf"
+          image: ghcr.io/kube-vip/kube-vip:v0.8.9
+          imagePullPolicy: IfNotPresent
+          name: kube-vip
+          resources: {}
+          securityContext:
+            capabilities:
+              add:
+              - NET_ADMIN
+              - NET_RAW
+          volumeMounts:
+          - mountPath: /etc/kubernetes/admin.conf
+            name: kubeconfig
+        hostNetwork: true
+        volumes:
+        - hostPath:
+            path: /etc/rancher/k3s/k3s.yaml
+          name: kubeconfig
+      status: {}
