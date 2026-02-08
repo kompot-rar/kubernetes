@@ -1,0 +1,32 @@
+ apiVersion: argoproj.io/v1alpha1
+ kind: Application
+ metadata:
+   name: traefik
+   namespace: argocd
+ spec:
+   project: default
+   source:
+     chart: traefik
+     repoURL: https://traefik.github.io/charts
+     targetRevision: 34.0.0 # Sprawdź najnowszą stabilną wersję
+     helm:
+       values: |
+         service:
+           spec:
+             loadBalancerIP: 10.0.20.10
+         ports:
+           web:
+             exposedPort: 80
+           websecure:
+             exposedPort: 443
+         additionalArguments:
+           - "--providers.kubernetesingress.ingressendpoint.ip=10.0.20.10"
+   destination:
+     server: https://kubernetes.default.svc
+     namespace: kube-system
+   syncPolicy:
+     automated:
+       prune: true
+       selfHeal: true
+     syncOptions:
+       - CreateNamespace=true
