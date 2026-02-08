@@ -1,41 +1,43 @@
 ---
+# Główne zadania instalacyjne dla K3s. Konfigurujemy klaster w trybie HA.
+
 - name: Set system hostname
   hostname:
     name: "{{ inventory_hostname }}"
-
-- name: Check if K3s binary exists
-  stat:
-    path: /usr/local/bin/k3s
-  register: k3s_installed
-
-- name: Check for K3s Agent uninstall script
-  stat:
-    path: /usr/local/bin/k3s-agent-uninstall.sh
-  register: k3s_agent_uninstall_script
-
-- name: Uninstall K3s Agent (Clean up before promoting to Master)
-  command: /usr/local/bin/k3s-agent-uninstall.sh
-  when: k3s_agent_uninstall_script.stat.exists
+  tags: [k3s_install]
 
 - name: Install K3s on First Master (Init)
   shell: >
-    curl -sfL https://get.k3s.io | K3S_TOKEN="{{ k3s_token }}" sh -s - server 
+    curl -sfL https://get.k3s.io | sh -s - server 
     --cluster-init 
     --tls-san {{ virtual_ip }}
     --node-name {{ inventory_hostname }}
     --disable traefik
+    --disable servicelb
   args:
     creates: /var/lib/rancher/k3s/server/node-token
   when: 
     - inventory_hostname == "k3s-master-0"
+  tags: [k3s_install]
 
-- name: Wait for First Master to be ready
+- name: Wait for node-token file to exist
   wait_for:
-    host: "{{ hostvars['k3s-master-0']['ansible_host'] }}"
-    port: 6443
-    delay: 5
-    timeout: 300
+    path: /var/lib/rancher/k3s/server/node-token
   when: inventory_hostname == "k3s-master-0"
+  tags: [k3s_install]
+
+- name: Read node-token from First Master
+  slurp:
+    src: /var/lib/rancher/k3s/server/node-token
+  register: node_token_encoded
+  when: inventory_hostname == "k3s-master-0"
+  tags: [k3s_install]
+
+- name: Set k3s_token fact for all hosts
+  set_fact:
+    k3s_token: "{{ hostvars['k3s-master-0']['node_token_encoded']['content'] | b64decode | trim }}"
+  run_once: true
+  tags: [k3s_install]
 
 - name: Join remaining Masters to Cluster
   shell: >
@@ -44,9 +46,10 @@
     --tls-san {{ virtual_ip }}
     --node-name {{ inventory_hostname }}
     --disable traefik
-  # Removing 'creates' allows reconfiguration, but keeps it idempotent enough
+    --disable servicelb
   when: 
     - inventory_hostname != "k3s-master-0"
+  tags: [k3s_install]
 
 - name: Wait for node to register in Kubernetes
   command: /usr/local/bin/kubectl get node {{ inventory_hostname }}
@@ -56,6 +59,7 @@
   retries: 30
   delay: 10
   when: inventory_hostname != "k3s-master-0"
+  tags: [k3s_install]
 
 - name: Label remaining nodes as Masters
   command: >
@@ -70,3 +74,4 @@
   delay: 5
   when: 
     - inventory_hostname != "k3s-master-0"
+  tags: [k3s_install]

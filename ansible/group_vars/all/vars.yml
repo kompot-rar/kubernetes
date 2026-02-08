@@ -1,0 +1,7 @@
+---
+# Zmienne globalne dla całego klastra.
+
+# Wirtualny adres IP (VIP) współdzielony przez węzły master.
+# Służy jako punkt wejściowy dla API Servera (HA) oraz usług LoadBalancer.
+virtual_ip: "10.0.20.10"
+vip_cidr: "32"

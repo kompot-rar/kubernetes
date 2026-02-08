@@ -1,3 +1,7 @@
 #SPDX-License-Identifier: MIT-0
 ---
-# defaults file for roles/kube_vip
+# Domyślne wartości zmiennych dla roli kube_vip.
+
+# Maska podsieci (CIDR) dla wirtualnego adresu IP. 
+# Wartość 24 odpowiada masce 255.255.255.0.
+vip_cidr: 24

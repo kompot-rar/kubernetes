@@ -1,73 +1,138 @@
 ---
+# Ten plik definiuje zadania dla roli kube_vip, która zapewnia wysoką dostępność (HA) 
+# dla punktu końcowego API Kubernetes poprzez współdzielony adres IP (VIP).
+
 - name: Ensure K3s manifests directory exists
+  # K3s automatycznie wdraża manifesty umieszczone w tym katalogu.
+  # Tworzymy go, aby mieć pewność, że mamy gdzie zapisać konfigurację Kube-VIP.
   file:
     path: /var/lib/rancher/k3s/server/manifests
     state: directory
     mode: '0755'
+  tags:
+    - kube_vip
 
-- name: Deploy Kube-VIP Manifest
+- name: Deploy Kube-VIP Manifest (RBAC + DaemonSet)
+  # Wdrażamy Kube-VIP jako DaemonSet. Ta konfiguracja obejmuje:
+  # 1. ServiceAccount dla Kube-VIP.
+  # 2. RBAC (ClusterRole i Binding), aby Kube-VIP mógł zarządzać dzierżawami (leases) i usługami.
+  # 3. DaemonSet, który uruchamia Kube-VIP na każdym węźle master.
   copy:
-    dest: /var/lib/rancher/k3s/server/manifests/kube-vip.yaml
+    dest: /var/lib/rancher/k3s/server/manifests/kube-vip-ds.yaml
     mode: '0644'
     content: |
       apiVersion: v1
-      kind: Pod
+      kind: ServiceAccount
       metadata:
-        creationTimestamp: null
         name: kube-vip
         namespace: kube-system
-      spec:
-        hostAliases:
-        - ip: "127.0.0.1"
-          hostnames:
-          - "kubernetes"
-        containers:
-        - args:
-          - manager
-          env:
-          - name: vip_arp
-            value: "true"
-          - name: port
-            value: "6443"
-          - name: vip_interface
-            value: "{{ ansible_default_ipv4.interface | default('eth0') }}"
-          - name: vip_cidr
-            value: "32"
-          - name: cp_enable
-            value: "true"
-          - name: cp_namespace
-            value: "kube-system"
-          - name: vip_ddns
-            value: "false"
-          - name: vip_leaderelection
-            value: "true"
-          - name: vip_leaseduration
-            value: "5"
-          - name: vip_renewdeadline
-            value: "3"
-          - name: vip_retryperiod
-            value: "1"
-          - name: address
-            value: "{{ virtual_ip }}"
-          - name: prometheus_server
-            value: ":2112"
-          - name: KUBECONFIG
-            value: "/etc/kubernetes/admin.conf"
-          image: ghcr.io/kube-vip/kube-vip:v0.8.9
-          imagePullPolicy: IfNotPresent
+      ---
+      apiVersion: rbac.authorization.k8s.io/v1
+      kind: ClusterRole
+      metadata:
+        name: system:kube-vip-role
+      rules:
+        # Kube-VIP musi widzieć węzły i usługi, aby poprawnie kierować ruchem.
+        - apiGroups: [""]
+          resources: ["nodes", "services", "endpoints", "pods"]
+          verbs: ["list", "get", "watch", "update"]
+        # Coordination API jest kluczowe dla mechanizmu Leader Election (wybór lidera).
+        - apiGroups: ["coordination.k8s.io"]
+          resources: ["leases"]
+          verbs: ["get", "list", "watch", "create", "update", "patch"]
+      ---
+      apiVersion: rbac.authorization.k8s.io/v1
+      kind: ClusterRoleBinding
+      metadata:
+        name: system:kube-vip-binding
+      roleRef:
+        apiGroup: rbac.authorization.k8s.io
+        kind: ClusterRole
+        name: system:kube-vip-role
+      subjects:
+        - kind: ServiceAccount
           name: kube-vip
-          resources: {}
-          securityContext:
-            capabilities:
-              add:
-              - NET_ADMIN
-              - NET_RAW
-          volumeMounts:
-          - mountPath: /etc/kubernetes/admin.conf
-            name: kubeconfig
-        hostNetwork: true
-        volumes:
-        - hostPath:
-            path: /etc/rancher/k3s/k3s.yaml
-          name: kubeconfig
-      status: {}
+          namespace: kube-system
+      ---
+      apiVersion: apps/v1
+      kind: DaemonSet
+      metadata:
+        name: kube-vip-ds
+        namespace: kube-system
+      spec:
+        selector:
+          matchLabels:
+            name: kube-vip-ds
+        template:
+          metadata:
+            labels:
+              name: kube-vip-ds
+          spec:
+            serviceAccountName: kube-vip
+            containers:
+            - args:
+              - manager
+              env:
+              # vip_arp: używamy ARP do rozgłaszania adresu VIP w sieci lokalnej (Layer 2).
+              - name: vip_arp
+                value: "true"
+              # Port 6443 to standardowy port API Servera Kubernetes.
+              - name: port
+                value: "6443"
+              # Interfejs sieciowy, na którym ma być wystawiony VIP.
+              - name: vip_interface
+                value: "{{ ansible_facts['default_ipv4']['interface'] | default('eth0') }}"
+              # Nasz wirtualny adres IP.
+              - name: vip_address
+                value: "{{ virtual_ip }}"
+              # Maska podsieci dla VIP.
+              - name: vip_cidr
+                value: "{{ vip_cidr }}"
+              # cp_enable: włącza obsługę Control Plane (VIP dla API Servera).
+              - name: cp_enable
+                value: "true"
+              - name: cp_namespace
+                value: kube-system
+              # Leader Election zapewnia, że tylko jeden węzeł na raz obsługuje VIP.
+              - name: vip_leaderelection
+                value: "true"
+              - name: vip_leaseduration
+                value: "5"
+              - name: vip_renewdeadline
+                value: "3"
+              - name: vip_retryperiod
+                value: "1"
+              - name: prometheus_server
+                value: ":2112"
+              # svc_enable: pozwala Kube-VIP obsługiwać również usługi typu LoadBalancer.
+              - name: svc_enable
+                value: "true"
+              image: ghcr.io/kube-vip/kube-vip:v0.8.9
+              imagePullPolicy: IfNotPresent
+              name: kube-vip
+              securityContext:
+                privileged: true
+                capabilities:
+                  add:
+                  - NET_ADMIN
+                  - NET_RAW
+                  - SYS_TIME
+            # Kube-VIP musi działać w sieci hosta, aby zarządzać adresem IP na interfejsie.
+            hostNetwork: true
+            # Tolerancje pozwalają na uruchomienie Kube-VIP na węzłach master (które mają tainty).
+            tolerations:
+            - effect: NoSchedule
+              operator: Exists
+            - effect: NoExecute
+              operator: Exists
+  tags:
+    - kube_vip
+
+- name: Remove old Pod-based manifest
+  # Czyścimy stare pliki manifestów (np. jeśli wcześniej używaliśmy Static Pods),
+  # aby uniknąć konfliktów z nowym DaemonSetem.
+  file:
+    path: /var/lib/rancher/k3s/server/manifests/kube-vip.yaml
+    state: absent
+  tags:
+    - kube_vip
