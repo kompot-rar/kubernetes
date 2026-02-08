@@ -34,8 +34,8 @@
       rules:
         # Kube-VIP musi widzieć węzły i usługi, aby poprawnie kierować ruchem.
         - apiGroups: [""]
-          resources: ["nodes", "services", "endpoints", "pods"]
-          verbs: ["list", "get", "watch", "update"]
+          resources: ["nodes", "services", "services/status", "endpoints", "pods"]
+          verbs: ["list", "get", "watch", "update", "patch"]
         # Coordination API jest kluczowe dla mechanizmu Leader Election (wybór lidera).
         - apiGroups: ["coordination.k8s.io"]
           resources: ["leases"]
