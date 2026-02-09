@@ -1,0 +1,133 @@
+---
+# Playbook konfigurujący "Kuźnię" (The Forge) - serwer pomocniczy dla klastra K3s.
+# Odpowiada za: Docker, Lokalny Rejestr Obrazów oraz GitHub Runnera.
+
+- name: Konfiguracja Kuźni (The Forge)
+  hosts: kuznia
+  become: true
+
+  vars:
+    # Wersja runnera - warto trzymać w zmiennej dla łatwej aktualizacji
+    runner_version: "2.321.0"
+    # Pamiętaj o zdefiniowaniu tych zmiennych w group_vars lub przekazaniu ich do playbooka
+    github_user: "YOUR_GITHUB_USER"
+    github_repo: "YOUR_GITHUB_REPO"
+
+  tasks:
+    # --- INSTALACJA DOCKERA ---
+
+    - name: Instalacja paczek systemowych
+      # Niezbędne narzędzia do obsługi repozytoriów HTTPS i Pythona dla Ansible
+      apt:
+        name: [ca-certificates, curl, gnupg, python3-pip, python3-requests]
+        state: present
+        update_cache: yes
+
+    - name: Utworzenie katalogu na klucze GPG
+      # Nowoczesny standard Debiana to /etc/apt/keyrings
+      file:
+        path: /etc/apt/keyrings
+        state: directory
+        mode: '0755'
+
+    - name: Pobranie klucza GPG Dockera
+      # Pobieramy klucz bezpośrednio do dedykowanego katalogu
+      get_url:
+        url: https://download.docker.com/linux/debian/gpg
+        dest: /etc/apt/keyrings/docker.asc
+        mode: '0644'
+
+    - name: Dodanie repozytorium Dockera (Debian Bookworm)
+      # Używamy signed-by, aby powiązać klucz z konkretnym repozytorium
+      apt_repository:
+        repo: "deb [arch=amd64 signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/debian bookworm stable"
+        state: present
+        filename: docker
+
+    - name: Instalacja Docker Engine
+      # Główny silnik kontenerowy oraz wtyczki do Compose i Buildx (niezbędne do CI/CD)
+      apt:
+        name: [docker-ce, docker-ce-cli, containerd.io, docker-buildx-plugin, docker-compose-plugin]
+        state: present
+
+    - name: Uruchomienie serwisu Docker
+      # Upewniamy się, że Docker działa i wystartuje po restarcie maszyny
+      service:
+        name: docker
+        state: started
+        enabled: yes
+
+    - name: Utworzenie użytkownika 'runner' dla GitHub Actions
+      # Osobny użytkownik to standard bezpieczeństwa. 
+      # Grupa 'docker' pozwala mu na sterowanie kontenerami bez sudo.
+      user:
+        name: runner
+        groups: docker
+        append: yes
+        shell: /bin/bash
+
+    # --- KONFIGURACJA LOKALNEGO REJESTRU (Faza 2 Battleplanu) ---
+
+    - name: Uruchomienie lokalnego rejestru obrazów (port 5000)
+      # Ten kontener będzie przechowywał Twoje obrazy, aby klaster k3s nie musiał ich ssać z internetu.
+      docker_container:
+        name: local-registry
+        image: registry:2
+        state: started
+        restart_policy: always
+        ports:
+          - "5000:5000"
+        volumes:
+          - /opt/registry:/var/lib/registry
+
+    # --- INSTALACJA GITHUB RUNNERA ---
+
+    - name: Pobranie archiwum runnera
+      # Pobieramy oficjalny binarny pakiet runnera bezpośrednio z GitHub
+      get_url:
+        url: "https://github.com/actions/runner/releases/download/v{{ runner_version }}/actions-runner-linux-x64-{{ runner_version }}.tar.gz"
+        dest: "/home/runner/actions-runner.tar.gz"
+        owner: runner
+        group: runner
+
+    - name: Utworzenie katalogu dla runnera
+      # Ansible unarchive wymaga, aby katalog docelowy istniał
+      file:
+        path: "/home/runner/actions-runner"
+        state: directory
+        owner: runner
+        group: runner
+        mode: '0755'
+
+    - name: Rozpakowanie runnera
+      # Wypakowanie plików binarnych do katalogu roboczego
+      unarchive:
+        src: "/home/runner/actions-runner.tar.gz"
+        dest: "/home/runner/actions-runner"
+        remote_src: yes
+        owner: runner
+        group: runner
+
+    - name: Instalacja zależności runnera (skrypt systemowy)
+      # GitHub dostarcza skrypt, który dociąga brakujące biblioteki systemowe (np. libicu)
+      command: "./bin/installdependencies.sh"
+      args:
+        chdir: "/home/runner/actions-runner"
+      become: true
+
+    - name: Sprawdzenie czy runner jest już skonfigurowany
+      # Szukamy pliku .runner - jeśli istnieje, oznacza to że config.sh został już wykonany
+      stat:
+        path: "/home/runner/actions-runner/.runner"
+      register: runner_configured
+
+    - name: Wyświetlenie instrukcji rejestracji (jeśli nie skonfigurowany)
+      # Ze względów bezpieczeństwa tokena GitHub, rejestrację wykonujemy ręcznie w terminalu
+      debug:
+        msg:
+          - "Wszystko gotowe! Teraz musisz zarejestrować runnera ręcznie (ze względów bezpieczeństwa tokena)."
+          - "1. Wejdź na GitHub -> Settings -> Actions -> Runners -> New self-hosted runner"
+          - "2. Zaloguj się na Kuźnię: ssh root@10.0.20.50"
+          - "3. Przełącz się na użytkownika: su - runner"
+          - "4. Wykonaj komendę: cd actions-runner && ./config.sh --url https://github.com/{{ github_user }}/{{ github_repo }} --token TWOJ_TOKEN --labels k3s-dev"
+      when: not runner_configured.stat.exists

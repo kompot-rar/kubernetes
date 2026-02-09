@@ -76,3 +76,29 @@
     kubeconfig: /etc/rancher/k3s/k3s.yaml
   become: true
   when: cloudflare_tunnel_token is defined
+
+- name: Create GitHub Container Registry Secret for ArgoCD
+  kubernetes.core.k8s:
+    name: ghcr-credentials
+    namespace: argocd
+    kind: Secret
+    state: present
+    definition:
+      apiVersion: v1
+      type: kubernetes.io/dockercfg
+      metadata:
+        labels:
+          argocd.argoproj.io/secret-type: repository
+      stringData:
+        .dockercfg: |
+          {
+            "ghcr.io": {
+              "username": "{{ github_container_registry_user }}",
+              "password": "{{ github_container_registry_token }}",
+              "email": "noreply@github.com",
+              "auth": "{{ (github_container_registry_user + ':' + github_container_registry_token) | b64encode }}"
+            }
+          }
+    kubeconfig: /etc/rancher/k3s/k3s.yaml
+  become: true
+  when: github_container_registry_token is defined

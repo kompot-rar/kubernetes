@@ -1,0 +1,40 @@
+---
+- name: Konfiguracja zaufania do lokalnego rejestru w K3s
+  # Targetujemy grupę 'masters'. Warto pamiętać, że w środowisku produkcyjnym 
+  # taką konfigurację zazwyczaj aplikuje się na wszystkich węzłach (również workerach), 
+  # aby każdy mógł pobierać obrazy z lokalnego mirrora.
+  hosts: masters
+  become: true
+
+  tasks:
+    - name: Utworzenie katalogu konfiguracji k3s
+      # K3s szuka plików konfiguracyjnych dla runtime'u (containerd) 
+      # właśnie w /etc/rancher/k3s.
+      file:
+        path: /etc/rancher/k3s
+        state: directory
+        mode: '0755'
+
+    - name: Konfiguracja registries.yaml
+      # Ten plik definiuje, jak containerd ma traktować konkretne adresy rejestrów.
+      # Ustawienie mirrora pozwala przekierować ruch dla konkretnej domeny/IP.
+      copy:
+        dest: /etc/rancher/k3s/registries.yaml
+        content: |
+          mirrors:
+            "10.0.20.50:5000":
+              endpoint:
+                - "http://10.0.20.50:5000"
+          configs:
+            "10.0.20.50:5000":
+              tls:
+                # Flaga insecure_skip_verify jest kluczowa w homelabie, 
+                # gdy nie używamy pełnego zaufanego łańcucha certyfikatów (CA).
+                insecure_skip_verify: true
+
+    - name: Restart K3s, aby załadować nową konfigurację
+      # K3s wczytuje registries.yaml tylko podczas startu usługi. 
+      # Restart jest niezbędny do zaaplikowania zmian.
+      service:
+        name: k3s
+        state: restarted

@@ -10,7 +10,12 @@ all:
               ansible_host: 10.0.20.22
             k3s-master-2:
               ansible_host: 10.0.20.23
+    infra:
+      hosts:
+        kuznia:
+          ansible_host: 10.0.20.50
+          ansible_user: root
   vars:
     ansible_user: ubuntu
-    ansible_ssh_private_key_file: /home/kompot/.ssh/id_ed25519 
+    ansible_ssh_private_key_file: /home/kompot/.ssh/id_ed25519
     ansible_ssh_extra_args: '-o StrictHostKeyChecking=no'
