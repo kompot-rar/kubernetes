@@ -1,0 +1,35 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: vibe-devops-dev
+  namespace: blog
+  labels:
+    app: vibe-devops
+    env: dev
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: vibe-devops
+      env: dev
+  template:
+    metadata:
+      labels:
+        app: vibe-devops
+        env: dev
+    spec:
+      containers:
+        - name: blog
+          image: ghcr.io/kompot-rar/vibe-devops:dev
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 80
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: 200m
+              memory: 128Mi
+      imagePullSecrets:
+        - name: ghcr-secret

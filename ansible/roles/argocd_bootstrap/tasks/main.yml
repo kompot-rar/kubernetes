@@ -52,3 +52,27 @@
 - name: Show ArgoCD pods status
   ansible.builtin.debug:
     var: argocd_pods.stdout_lines
+
+- name: Create blog namespace for Cloudflared
+  kubernetes.core.k8s:
+    name: blog
+    api_version: v1
+    kind: Namespace
+    state: present
+    kubeconfig: /etc/rancher/k3s/k3s.yaml
+  become: true
+
+- name: Create Cloudflare Tunnel Secret in blog namespace
+  kubernetes.core.k8s:
+    name: cloudflared-tunnel
+    namespace: blog
+    kind: Secret
+    state: present
+    definition:
+      apiVersion: v1
+      type: Opaque
+      stringData:
+        token: "{{ cloudflare_tunnel_token }}"
+    kubeconfig: /etc/rancher/k3s/k3s.yaml
+  become: true
+  when: cloudflare_tunnel_token is defined

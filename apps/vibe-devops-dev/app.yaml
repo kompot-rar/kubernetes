@@ -1,0 +1,20 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: vibe-devops-dev
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/kompot-rar/kubernetes.git
+    targetRevision: HEAD
+    path: apps/vibe-devops-dev
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: blog
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true

@@ -1,0 +1,16 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: vibe-devops-dev
+  namespace: blog
+  labels:
+    app: vibe-devops
+    env: dev
+spec:
+  type: ClusterIP
+  selector:
+    app: vibe-devops
+    env: dev
+  ports:
+    - port: 80
+      targetPort: 80
