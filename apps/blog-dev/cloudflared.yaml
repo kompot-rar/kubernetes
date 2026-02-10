@@ -10,7 +10,9 @@ data:
     no-autoupdate: true
     ingress:
       - hostname: dev.mrozy.org
-        service: http://vibe-devops-dev.blog.svc.cluster.local:80
+        service: http://blog-devops-dev.blog.svc.cluster.local:80
+      - hostname: devops.mrozy.org
+        service: http://blog-devops-service.vibe-prod.svc.cluster.local:80
       - service: http_status:404
 ---
 apiVersion: apps/v1

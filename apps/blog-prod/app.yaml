@@ -1,14 +1,14 @@
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
-  name: vibe-devops-prod
+  name: blog-prod
   namespace: argocd
 spec:
   project: default
   source:
     repoURL: https://github.com/kompot-rar/kubernetes.git
     targetRevision: HEAD
-    path: apps/vibe-devops-prod
+    path: apps/blog-prod
   destination:
     server: https://kubernetes.default.svc
     namespace: vibe-prod

@@ -1,24 +1,25 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: vibe-devops-prod
+  name: blog-devops-prod
   namespace: vibe-prod
   labels:
-    app: vibe-devops
+    app: blog-devops
     env: prod
 spec:
   replicas: 3
   selector:
     matchLabels:
-      app: vibe-devops
+      app: blog-devops
   template:
     metadata:
       labels:
-        app: vibe-devops
+        app: blog-devops
+        env: prod
     spec:
       containers:
-      - name: vibe-devops
-        image: 10.0.20.50:5000/vibe-devops:latest
+      - name: blog
+        image: 10.0.20.50:5000/blog-devops:latest
         imagePullPolicy: Always
         ports:
         - containerPort: 80

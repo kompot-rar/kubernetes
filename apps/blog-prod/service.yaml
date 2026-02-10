@@ -1,11 +1,14 @@
 apiVersion: v1
 kind: Service
 metadata:
-  name: vibe-devops-prod-service
+  name: blog-devops-service
   namespace: vibe-prod
+  labels:
+    app: blog-devops
+    env: prod
 spec:
   selector:
-    app: vibe-devops
+    app: blog-devops
   ports:
     - protocol: TCP
       port: 80
