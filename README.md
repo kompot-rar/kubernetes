@@ -12,9 +12,13 @@ The goal of this project is to build a highly available, production-ready Kubern
 
 *   **`terraform/`**: Infrastructure as Code using the Proxmox BPG provider to provision virtual machines (Ubuntu) with optimized resource allocation.
 *   **`ansible/`**: Automated configuration management:
-    *   **K3s Installation**: Lightweight Kubernetes distribution setup.
-    *   **Kube-VIP**: High Availability (HA) configuration for the Control Plane.
+    *   **K3s Installation**: High Availability setup with 3 Control Plane nodes and etcd.
+    *   **Kube-VIP**: Floating IP (VIP) configuration for Control Plane High Availability.
     *   **ArgoCD Bootstrap**: Initializing GitOps for continuous delivery.
+*   **`apps/`**: Kubernetes manifests and application configurations managed via GitOps:
+    *   **Blog (Dev/Prod)**: Multi-environment deployment of the project's blog.
+    *   **Traefik**: Ingress Controller for routing external traffic.
+    *   **Cloudflared**: Secure tunnel for external access.
 *   **`argocd/`**: Root Application and GitOps manifests to manage the cluster's state.
 
 ## 🛠️ Tech Stack
@@ -22,8 +26,10 @@ The goal of this project is to build a highly available, production-ready Kubern
 *   **Hypervisor:** Proxmox VE
 *   **Provisioning:** Terraform
 *   **Configuration:** Ansible
-*   **Kubernetes:** K3s
+*   **Kubernetes:** K3s (HA Mode)
+*   **High Availability:** Kube-VIP
 *   **GitOps:** ArgoCD
+*   **Ingress:** Traefik
 *   **Networking:** Netgear Managed Switch (VLANs)
 
 ---
