@@ -11,7 +11,7 @@ spec:
     path: manifests/blog-prod
   destination:
     server: https://kubernetes.default.svc
-    namespace: vibe-prod
+    namespace: blog-prod
   syncPolicy:
     automated:
       prune: true
