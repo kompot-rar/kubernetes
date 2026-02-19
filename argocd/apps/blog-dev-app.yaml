@@ -8,7 +8,7 @@ spec:
   source:
     repoURL: https://github.com/kompot-rar/kubernetes.git
     targetRevision: HEAD
-    path: kubernetes/manifests/blog-dev
+    path: manifests/blog-dev
   destination:
     server: https://kubernetes.default.svc
     namespace: blog
