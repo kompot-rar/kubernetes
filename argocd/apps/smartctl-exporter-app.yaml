@@ -13,18 +13,14 @@ spec:
     chart: prometheus-smartctl-exporter
     helm:
       values: |
-        config:
-          # Jak często odświeżać dane SMART (nie ma co męczyć dysków, 60s wystarczy)
-          interval: 60s
-        
-        # Kluczowe dla Prometheusa, którego zainstalowaliśmy
         serviceMonitor:
           enabled: true
           namespace: monitoring
-          # Dodajemy etykiety, które Prometheus Operator na pewno skanuje
           additionalLabels:
             release: monitoring
             app: kube-prometheus-stack
+        
+        config:
 
         # Eksporter musi "czuć" sieć hosta i mieć dostęp do /dev
         prometheus-smartctl-exporter:
