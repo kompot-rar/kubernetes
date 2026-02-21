@@ -21,14 +21,23 @@ spec:
         serviceMonitor:
           enabled: true
           namespace: monitoring
-          # Ta etykieta musi pasować do selektora Twojego Prometheusa
+          # Dodajemy etykiety, które Prometheus Operator na pewno skanuje
           additionalLabels:
             release: monitoring
+            app: kube-prometheus-stack
 
-        # Kontener musi mieć dostęp do fizycznych dysków
-        # Te ustawienia zazwyczaj są domyślne w tym charcie, ale warto o nich pamiętać
+        # Eksporter musi "czuć" sieć hosta i mieć dostęp do /dev
         prometheus-smartctl-exporter:
+          hostNetwork: true
           privileged: true
+          # Mapujemy /dev z hosta do kontenera (bardzo ważne!)
+          extraVolumeMounts:
+            - name: dev
+              mountPath: /dev
+          extraVolumes:
+            - name: dev
+              hostPath:
+                path: /dev
           resources:
             requests:
               cpu: 10m
