@@ -21,18 +21,13 @@ spec:
             hosts:
               - grafana.local
         
-        prometheus:
-          prometheusSpec:
-            retention: 10d
-            storageSpec:
-              volumeClaimTemplate:
-                spec:
-                  # Używamy domyślnego storageClass klastra
-                  accessModes: ["ReadWriteOnce"]
-                  resources:
-                    requests:
-                      storage: 10Gi
-            
+        # Wyłączamy webhooki, które dublują zasoby RBAC i obciążają klaster
+        prometheusOperator:
+          admissionWebhooks:
+            enabled: false
+            patch:
+              enabled: false
+        
         alertmanager:
           enabled: true
         
