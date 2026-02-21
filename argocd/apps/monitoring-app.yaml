@@ -1,0 +1,51 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: monitoring
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  source:
+    repoURL: https://prometheus-community.github.io/helm-charts
+    targetRevision: 69.1.1
+    chart: kube-prometheus-stack
+    helm:
+      values: |
+        grafana:
+          enabled: true
+          # Grafana będzie dostępna wewnątrz klastra (Service type: ClusterIP)
+        
+        prometheus:
+          prometheusSpec:
+            retention: 10d
+            storageSpec:
+              volumeClaimTemplate:
+                spec:
+                  # Używamy domyślnego storageClass klastra
+                  accessModes: ["ReadWriteOnce"]
+                  resources:
+                    requests:
+                      storage: 10Gi
+            
+        alertmanager:
+          enabled: true
+        
+        nodeExporter:
+          enabled: true
+        
+        # Włączamy zbieranie metryk z samego k3s
+        kubeStateMetrics:
+          enabled: true
+  
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: monitoring
+  
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
