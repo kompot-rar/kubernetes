@@ -13,19 +13,25 @@ spec:
     chart: prometheus-smartctl-exporter
     helm:
       values: |
+        # Upewniamy się, że serwis ma nazwę portu, którą zrozumie monitor
+        service:
+          port: 80
+          targetPort: 9633
+          name: http-metrics
+          additionalLabels:
+            release: monitoring
+
         serviceMonitor:
           enabled: true
           namespace: monitoring
           additionalLabels:
             release: monitoring
-            app: kube-prometheus-stack
-          # Próbujemy obu popularnych nazw portów, żeby mieć pewność
           endpoints:
-            - port: https-metrics
-              interval: 30s
             - port: http-metrics
               interval: 30s
+              path: /metrics
 
+        # Reszta konfiguracji sprzętowej
         config:
           interval: 60s
         
