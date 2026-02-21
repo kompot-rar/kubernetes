@@ -15,7 +15,11 @@ spec:
       values: |
         grafana:
           enabled: true
-          # Grafana będzie dostępna wewnątrz klastra (Service type: ClusterIP)
+          ingress:
+            enabled: true
+            ingressClassName: traefik
+            hosts:
+              - grafana.local
         
         prometheus:
           prometheusSpec:
