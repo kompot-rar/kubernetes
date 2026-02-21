@@ -24,10 +24,8 @@ spec:
         prometheus:
           prometheusSpec:
             retention: 10d
-            # To jest KLUCZ: Prometheus ma szukać wszystkich ServiceMonitorów
+            # Automatycznie zbiera wszystko z klastra (domyślne i bezpieczne)
             serviceMonitorSelectorNilUsesHelmValues: false
-            serviceMonitorSelector: {}
-            serviceMonitorNamespaceSelector: {}
             
             storageSpec:
               volumeClaimTemplate:
