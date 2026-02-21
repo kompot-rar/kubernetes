@@ -26,22 +26,22 @@ spec:
             retention: 10d
             serviceMonitorSelectorNilUsesHelmValues: false
             
-            # MONITORING FIZYCZNY (VLAN 10) - OSZCZĘDNY
+            # PEWNY FORMAT DODATKOWEJ KONFIGURACJI
             additionalScrapeConfigs:
               - job_name: 'proxmox-nodes'
-                scrape_interval: 180s # Co 3 minuty - starczy aż nadto
+                scrape_interval: 180s
                 static_configs:
                   - targets:
                     - '10.0.10.11:9100'
                     - '10.0.10.12:9100'
                     - '10.0.10.13:9100'
               - job_name: 'proxmox-smart'
-                scrape_interval: 300s # SMART co 5 minut - idealny balans
+                scrape_interval: 300s
                 static_configs:
                   - targets:
-                    - '10.0.10.11:9633'
-                    - '10.0.10.12:9633'
-                    - '10.0.10.13:9633'
+                    - '10.0.10.11:9100' # smartmon_ siedzi na tym samym porcie co node-exporter
+                    - '10.0.10.12:9100'
+                    - '10.0.10.13:9100'
 
             storageSpec:
               volumeClaimTemplate:
@@ -59,10 +59,8 @@ spec:
 
         alertmanager:
           enabled: true
-        
         nodeExporter:
           enabled: true
-        
         kubeStateMetrics:
           enabled: true
   
