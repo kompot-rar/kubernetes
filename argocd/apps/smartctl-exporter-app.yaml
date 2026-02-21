@@ -13,34 +13,42 @@ spec:
     chart: prometheus-smartctl-exporter
     helm:
       values: |
+        # Konfiguracja Ingressa i ServiceMonitora
         serviceMonitor:
           enabled: true
           namespace: monitoring
           additionalLabels:
             release: monitoring
             app: kube-prometheus-stack
-        
-        config:
+          # Domyślna nazwa portu w tym charcie to 'http-metrics'
+          endpoints:
+            - port: http-metrics
+              interval: 30s
 
-        # Eksporter musi "czuć" sieć hosta i mieć dostęp do /dev
-        prometheus-smartctl-exporter:
-          hostNetwork: true
-          privileged: true
-          # Mapujemy /dev z hosta do kontenera (bardzo ważne!)
-          extraVolumeMounts:
-            - name: dev
-              mountPath: /dev
-          extraVolumes:
-            - name: dev
-              hostPath:
-                path: /dev
-          resources:
-            requests:
-              cpu: 10m
-              memory: 32Mi
-            limits:
-              cpu: 100m
-              memory: 64Mi
+        # Konfiguracja samego agenta
+        config:
+          interval: 60s
+        
+        # Kluczowe ustawienia dla dostępu do hardware'u
+        hostNetwork: true
+        privileged: true
+        
+        # Mapowanie /dev z hosta
+        extraVolumeMounts:
+          - name: dev
+            mountPath: /dev
+        extraVolumes:
+          - name: dev
+            hostPath:
+              path: /dev
+        
+        resources:
+          requests:
+            cpu: 10m
+            memory: 32Mi
+          limits:
+            cpu: 100m
+            memory: 64Mi
   
   destination:
     server: https://kubernetes.default.svc
