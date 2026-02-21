@@ -6,6 +6,23 @@
     - k3s_install
     - kube_vip
 
+- hosts: proxmox_nodes
+  become: yes
+  tasks:
+    - name: Install monitoring tools on Proxmox
+      apt:
+        name:
+          - prometheus-node-exporter
+          - smartmontools
+        state: present
+        update_cache: yes
+      
+    - name: Ensure Node Exporter is running
+      systemd:
+        name: prometheus-node-exporter
+        state: started
+        enabled: yes
+
 - hosts: masters[0]
   become: yes
   roles:
