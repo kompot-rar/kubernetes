@@ -24,9 +24,23 @@ spec:
         prometheus:
           prometheusSpec:
             retention: 10d
-            # Automatycznie zbiera wszystko z klastra (domyślne i bezpieczne)
             serviceMonitorSelectorNilUsesHelmValues: false
             
+            # DODAJEMY MONITORING ZEWNĘTRZNY (PROXMOX VLAN 10)
+            additionalScrapeConfigs:
+              - job_name: 'proxmox-nodes'
+                static_configs:
+                  - targets:
+                    - '10.0.10.11:9100' # Proxmox Node 1
+                    - '10.0.10.12:9100' # Proxmox Node 2
+                    - '10.0.10.13:9100' # Proxmox Node 3
+              - job_name: 'proxmox-smart'
+                static_configs:
+                  - targets:
+                    - '10.0.10.11:9633' # Smartctl na Proxmox Node 1
+                    - '10.0.10.12:9633' # Smartctl na Proxmox Node 2
+                    - '10.0.10.13:9633' # Smartctl na Proxmox Node 3
+
             storageSpec:
               volumeClaimTemplate:
                 spec:
