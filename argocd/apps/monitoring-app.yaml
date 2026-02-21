@@ -21,20 +21,34 @@ spec:
             hosts:
               - grafana.k3s
         
-        # Wyłączamy webhooki, które dublują zasoby RBAC i obciążają klaster
+        prometheus:
+          prometheusSpec:
+            retention: 10d
+            # To jest KLUCZ: Prometheus ma szukać wszystkich ServiceMonitorów
+            serviceMonitorSelectorNilUsesHelmValues: false
+            serviceMonitorSelector: {}
+            serviceMonitorNamespaceSelector: {}
+            
+            storageSpec:
+              volumeClaimTemplate:
+                spec:
+                  accessModes: ["ReadWriteOnce"]
+                  resources:
+                    requests:
+                      storage: 10Gi
+            
         prometheusOperator:
           admissionWebhooks:
             enabled: false
             patch:
               enabled: false
-        
+
         alertmanager:
           enabled: true
         
         nodeExporter:
           enabled: true
         
-        # Włączamy zbieranie metryk z samego k3s
         kubeStateMetrics:
           enabled: true
   
