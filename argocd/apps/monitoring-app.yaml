@@ -19,7 +19,7 @@ spec:
             enabled: true
             ingressClassName: traefik
             hosts:
-              - grafana.local
+              - grafana.k3s
         
         # Wyłączamy webhooki, które dublują zasoby RBAC i obciążają klaster
         prometheusOperator:
