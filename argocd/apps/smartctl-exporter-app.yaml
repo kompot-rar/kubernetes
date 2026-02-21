@@ -1,0 +1,49 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: smartctl-exporter
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  source:
+    repoURL: https://prometheus-community.github.io/helm-charts
+    targetRevision: 0.13.0
+    chart: prometheus-smartctl-exporter
+    helm:
+      values: |
+        config:
+          # Jak często odświeżać dane SMART (nie ma co męczyć dysków, 60s wystarczy)
+          interval: 60s
+        
+        # Kluczowe dla Prometheusa, którego zainstalowaliśmy
+        serviceMonitor:
+          enabled: true
+          namespace: monitoring
+          # Ta etykieta musi pasować do selektora Twojego Prometheusa
+          additionalLabels:
+            release: monitoring
+
+        # Kontener musi mieć dostęp do fizycznych dysków
+        # Te ustawienia zazwyczaj są domyślne w tym charcie, ale warto o nich pamiętać
+        prometheus-smartctl-exporter:
+          privileged: true
+          resources:
+            requests:
+              cpu: 10m
+              memory: 32Mi
+            limits:
+              cpu: 100m
+              memory: 64Mi
+  
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: monitoring
+  
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
