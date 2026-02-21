@@ -12,12 +12,11 @@ all:
               ansible_host: 10.0.20.23
     proxmox_nodes:
       hosts:
-        proxmox-01:
-          ansible_host: 10.0.10.11
-        proxmox-02:
-          ansible_host: 10.0.10.12
-        proxmox-03:
-          ansible_host: 10.0.10.13
+        proxmox:
+        proxmox-worker:
+        proxmox-worker-2:
+      vars:
+        ansible_user: root
     infra:
       hosts:
         kuznia:

@@ -1,27 +1,41 @@
 ---
-- hosts: k3s_cluster
-  become: yes
-  roles:
-    - common
-    - k3s_install
-    - kube_vip
-
 - hosts: proxmox_nodes
   become: yes
   tasks:
-    - name: Install monitoring tools on Proxmox
-      apt:
-        name:
-          - prometheus-node-exporter
-          - smartmontools
-        state: present
-        update_cache: yes
+    - name: FORCE - Remove every single file containing enterprise repo
+      shell: |
+        find /etc/apt/ -type f -exec grep -l "enterprise.proxmox.com" {} + | xargs rm -f || true
+      changed_when: false
+
+    - name: Ensure Proxmox no-subscription repo is present
+      copy:
+        dest: /etc/apt/sources.list.d/pve-no-sub.list
+        content: "deb http://download.proxmox.com/debian/pve {{ ansible_facts['distribution_release'] }} pve-no-subscription"
+
+    - name: Clean apt lists and update
+      shell: |
+        rm -rf /var/lib/apt/lists/*
+        apt-get update || true
+      changed_when: false
+
+    - name: Install monitoring tools via shell (to bypass strict apt module)
+      shell: |
+        apt-get install -y prometheus-node-exporter smartmontools
+      register: shell_install
+      changed_when: "'is already the newest version' not in shell_install.stdout"
       
     - name: Ensure Node Exporter is running
       systemd:
         name: prometheus-node-exporter
         state: started
         enabled: yes
+
+- hosts: k3s_cluster
+  become: yes
+  roles:
+    - common
+    - k3s_install
+    - kube_vip
 
 - hosts: masters[0]
   become: yes
