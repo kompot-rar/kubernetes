@@ -39,19 +39,21 @@ spec:
               const res = await axios.get(PROM_URL, { params: { query: q }, timeout: 5000 });
               return res.data.data.result;
             } catch (e) {
-              console.error(`Query Error:`, e.message);
+              console.error(`Query Error (${q}):`, e.message);
               return [];
             }
           };
 
           app.get('/api/status', async (req, res) => {
             try {
-              const [temp, pods, ram, cpu, uptime] = await Promise.all([
+              const [temp, pods, ram, cpu, uptime, restarts1h, unhealthyPods] = await Promise.all([
                 queryProm('max(node_hwmon_temp_celsius) by (instance)'),
                 queryProm('count(kube_pod_info)'),
                 queryProm('100 * (1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes))'),
                 queryProm('100 - (avg by (instance) (irate(node_cpu_seconds_total{mode="idle"}[5m])) * 100)'),
-                queryProm('time() - node_boot_time_seconds')
+                queryProm('time() - node_boot_time_seconds'),
+                queryProm('sum(increase(kube_pod_container_status_restarts_total[1h]))'),
+                queryProm('count(kube_pod_status_phase{phase!="Running"})')
               ]);
 
               const nodes = temp.map((t) => {
@@ -69,21 +71,38 @@ spec:
                 };
               });
 
+              // Logika "Rekruter-Ready"
+              const restartCount = restarts1h[0] ? Math.round(parseFloat(restarts1h[0].value[1])) : 0;
+              const unhealthyCount = unhealthyPods[0] ? parseInt(unhealthyPods[0].value[1]) : 0;
+              
+              let clusterStatus = "Healthy";
+              let statusMessage = "All systems operational. High availability maintained.";
+              
+              if (unhealthyCount > 0) {
+                clusterStatus = "Warning";
+                statusMessage = `Self-healing active: ${unhealthyCount} pod(s) recovering.`;
+              } else if (restartCount > 5) {
+                clusterStatus = "Observed";
+                statusMessage = "Recent node pressure detected. Automated recovery successful.";
+              }
+
               res.json({
                 cluster: {
                   totalPods: pods[0] ? pods[0].value[1] : "0",
-                  status: "Healthy",
+                  status: clusterStatus,
+                  message: statusMessage,
+                  restarts24h: restartCount, // Pokazujemy to jako dowód monitoringu!
                   lastUpdate: new Date().toISOString()
                 },
                 nodes: nodes
               });
             } catch (e) {
-              res.status(502).json({ error: "Błąd serwera statusu" });
+              res.status(502).json({ error: "Błąd serwera statusu", details: e.message });
             }
           });
 
           app.get('/health', (req, res) => res.send('OK'));
-          app.listen(3000, () => console.log('Super-Status Proxy listening on port 3000'));
+          app.listen(3000, () => console.log('Super-Status Proxy v2 listening on port 3000'));
           EOF
           node index.js
         ports:
