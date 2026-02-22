@@ -34,39 +34,65 @@ spec:
 
           const PROM_URL = "http://monitoring-kube-prometheus-prometheus.monitoring.svc:9090/api/v1/query";
 
+          const queryProm = async (q) => {
+            const res = await axios.get(PROM_URL, { params: { query: q }, timeout: 5000 });
+            return res.data.data.result;
+          };
+
           app.get('/api/status', async (req, res) => {
             try {
-              const query = 'max(node_hwmon_temp_celsius) by (instance)';
-              const response = await axios.get(PROM_URL, { 
-                params: { query },
-                timeout: 5000 
+              // Puszczamy wszystkie zapytania naraz (Parallel Execution)
+              const [temp, pods, ram, cpu, uptime] = await Promise.all([
+                queryProm('max(node_hwmon_temp_celsius) by (instance)'),
+                queryProm('count(kube_pod_info)'),
+                queryProm('100 * (1 - node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)'),
+                queryProm('100 - (avg by (instance) (irate(node_cpu_seconds_total{mode="idle"}[5m])) * 100)'),
+                queryProm('time() - node_boot_time_seconds')
+              ]);
+
+              // Mapujemy dane per node
+              const nodes = temp.map((t, i) => {
+                const instance = t.metric.instance;
+                const cpuVal = cpu.find(c => c.metric.instance === instance);
+                const ramVal = ram.find(r => r.metric.instance === instance);
+                const upVal = uptime.find(u => u.metric.instance === instance);
+                
+                return {
+                  name: instance.split(':')[0], // Samo IP bez portu
+                  temp: parseFloat(t.value[1]).toFixed(1),
+                  cpu: cpuVal ? parseFloat(cpuVal.value[1]).toFixed(1) : "0",
+                  ram: ramVal ? parseFloat(ramVal.value[1]).toFixed(1) : "0",
+                  uptime: upVal ? (parseFloat(upVal.value[1]) / 86400).toFixed(1) : "0" // w dniach
+                };
               });
-              
-              const data = response.data.data.result.map(r => ({
-                node: r.metric.instance,
-                temp: (r.value && r.value[1]) ? parseFloat(r.value[1]).toFixed(1) : "N/A"
-              }));
-              
-              res.json(data);
+
+              res.json({
+                cluster: {
+                  totalPods: pods[0] ? pods[0].value[1] : "0",
+                  status: "Healthy",
+                  lastUpdate: new Date().toISOString()
+                },
+                nodes: nodes
+              });
             } catch (e) {
               console.error("Prometheus Error:", e.message);
-              res.status(502).json({ error: "Błąd komunikacji z Prometheusem" });
+              res.status(502).json({ error: "Błąd pobierania metryk" });
             }
           });
 
           app.get('/health', (req, res) => res.send('OK'));
-          app.listen(3000, () => console.log('Status Proxy listening on port 3000'));
+          app.listen(3000, () => console.log('Super-Status Proxy listening on port 3000'));
           EOF
           node index.js
         ports:
         - containerPort: 3000
         resources:
           requests:
-            cpu: 10m
+            cpu: 20m
             memory: 64Mi
           limits:
-            cpu: 100m
-            memory: 256Mi # Zwiększam RAM dla npm install
+            cpu: 200m
+            memory: 256Mi
 ---
 apiVersion: v1
 kind: Service
