@@ -46,7 +46,7 @@ spec:
 
           app.get('/api/status', async (req, res) => {
             try {
-              const [temp, pods, ram, cpu, uptime, restarts24h, unhealthyPods, argoSync, chaosSectors, chaosErrors, chaosWear, chaosWriteLat, chaosInfo, chaosEvents, chaosReportedUncorrect, chaosSmartHealthy] = await Promise.all([
+              const [temp, pods, ram, cpu, uptime, restarts24h, unhealthyPods, argoSync, chaosSectors, chaosErrors, chaosWear, chaosWriteLat, chaosInfo, chaosEvents, chaosReportedUncorrect, chaosSmartHealthy, chaosLifeRemain, chaosPowerHours] = await Promise.all([
                 queryProm('max(node_hwmon_temp_celsius) by (instance)'),
                 queryProm('sum(kube_pod_status_phase{phase="Running"})'),
                 queryProm('100 * (1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes))'),
@@ -63,7 +63,9 @@ spec:
                 queryProm('smartmon_device_info{instance="10.0.10.13:9100", disk="/dev/sda"}'),
                 queryProm('smartmon_reallocated_event_count_raw_value{instance="10.0.10.13:9100", disk="/dev/sda"}'),
                 queryProm('smartmon_reported_uncorrect_raw_value{instance="10.0.10.13:9100", disk="/dev/sda"}'),
-                queryProm('smartmon_device_smart_healthy{instance="10.0.10.13:9100", disk="/dev/sda"}')
+                queryProm('smartmon_device_smart_healthy{instance="10.0.10.13:9100", disk="/dev/sda"}'),
+                queryProm('smartmon_percent_lifetime_remain_raw_value{instance="10.0.10.13:9100", disk="/dev/sda"}'),
+                queryProm('smartmon_power_on_hours_raw_value{instance="10.0.10.13:9100", disk="/dev/sda"}')
               ]);
 
               const nodes = temp.map((t) => {
@@ -90,6 +92,8 @@ spec:
               const events = chaosEvents[0] ? parseInt(chaosEvents[0].value[1]) : 0;
               const reportedUncorrect = chaosReportedUncorrect[0] ? parseInt(chaosReportedUncorrect[0].value[1]) : 0;
               const isSmartHealthy = chaosSmartHealthy[0] ? parseInt(chaosSmartHealthy[0].value[1]) === 1 : false;
+              const lifeRemain = chaosLifeRemain[0] ? parseInt(chaosLifeRemain[0].value[1]) : 100;
+              const powerHours = chaosPowerHours[0] ? parseInt(chaosPowerHours[0].value[1]) : 0;
 
               let chaosStatus = "Stable (For a dumpster disk)";
               let chaosNote = "Running on salvaged hardware. No data is safe here.";
@@ -97,6 +101,9 @@ spec:
               if (reportedUncorrect > 1000) {
                 chaosStatus = "Radioactive (ECC Failure)";
                 chaosNote = "Massive hardware ECC errors. Bit-rot is actively occurring.";
+              } else if (lifeRemain < 10) {
+                chaosStatus = "EOL (End of Life)";
+                chaosNote = "NAND cells exhausted. Write operations are high-risk.";
               } else if (errors > 0) {
                 chaosStatus = "Dying (Data Loss Detected)";
                 chaosNote = "Uncorrectable sectors found. SMART self-test is screaming.";
@@ -131,13 +138,15 @@ spec:
                   node: "10.0.10.13",
                   health_status: chaosStatus,
                   firmware_verdict: isSmartHealthy ? "PASSED (Optimistic)" : "FAILED (Critical)",
-                  alert_level: reportedUncorrect > 0 ? "Radioactive" : (errors > 0 ? "Critical" : (sectors > 0 || events > 0 ? "Warning" : "Nominal")),
+                  alert_level: reportedUncorrect > 0 ? "Radioactive" : (lifeRemain < 30 ? "Critical" : (errors > 0 ? "Critical" : (sectors > 0 || events > 0 ? "Warning" : "Nominal"))),
                   metrics: {
                     reallocated_sectors: sectors,
                     reallocated_events: events,
                     offline_uncorrectable: errors,
                     reported_uncorrectable_ecc: reportedUncorrect,
                     ssd_wear_cycles: wear,
+                    lifetime_remain_pct: lifeRemain,
+                    power_on_hours: powerHours,
                     avg_write_lat_sec: writeLat.toFixed(4)
                   },
                   sre_message: chaosNote
