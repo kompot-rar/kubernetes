@@ -11,8 +11,6 @@ spec:
     repoURL: https://github.com/kompot-rar/kubernetes.git
     targetRevision: HEAD
     path: manifests/monitoring
-    directory:
-      recurse: false
   destination:
     server: https://kubernetes.default.svc
     namespace: monitoring
