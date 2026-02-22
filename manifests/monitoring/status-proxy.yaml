@@ -24,7 +24,7 @@ spec:
         - |
           cd /app && \
           npm init -y && \
-          npm install express axios cors && \
+          npm install --production --no-package-lock --no-audit --no-fund express axios cors && \
           cat <<'EOF' > index.js
           const express = require('express');
           const axios = require('axios');
@@ -35,34 +35,37 @@ spec:
           const PROM_URL = "http://monitoring-kube-prometheus-prometheus.monitoring.svc:9090/api/v1/query";
 
           const queryProm = async (q) => {
-            const res = await axios.get(PROM_URL, { params: { query: q }, timeout: 5000 });
-            return res.data.data.result;
+            try {
+              const res = await axios.get(PROM_URL, { params: { query: q }, timeout: 5000 });
+              return res.data.data.result;
+            } catch (e) {
+              console.error(`Query Error:`, e.message);
+              return [];
+            }
           };
 
           app.get('/api/status', async (req, res) => {
             try {
-              // Puszczamy wszystkie zapytania naraz (Parallel Execution)
               const [temp, pods, ram, cpu, uptime] = await Promise.all([
                 queryProm('max(node_hwmon_temp_celsius) by (instance)'),
                 queryProm('count(kube_pod_info)'),
-                queryProm('100 * (1 - node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)'),
+                queryProm('100 * (1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes))'),
                 queryProm('100 - (avg by (instance) (irate(node_cpu_seconds_total{mode="idle"}[5m])) * 100)'),
                 queryProm('time() - node_boot_time_seconds')
               ]);
 
-              // Mapujemy dane per node
-              const nodes = temp.map((t, i) => {
+              const nodes = temp.map((t) => {
                 const instance = t.metric.instance;
                 const cpuVal = cpu.find(c => c.metric.instance === instance);
                 const ramVal = ram.find(r => r.metric.instance === instance);
                 const upVal = uptime.find(u => u.metric.instance === instance);
                 
                 return {
-                  name: instance.split(':')[0], // Samo IP bez portu
-                  temp: parseFloat(t.value[1]).toFixed(1),
+                  name: instance.split(':')[0],
+                  temp: t.value ? parseFloat(t.value[1]).toFixed(1) : "0",
                   cpu: cpuVal ? parseFloat(cpuVal.value[1]).toFixed(1) : "0",
                   ram: ramVal ? parseFloat(ramVal.value[1]).toFixed(1) : "0",
-                  uptime: upVal ? (parseFloat(upVal.value[1]) / 86400).toFixed(1) : "0" // w dniach
+                  uptime: upVal ? (parseFloat(upVal.value[1]) / 86400).toFixed(1) : "0"
                 };
               });
 
@@ -75,8 +78,7 @@ spec:
                 nodes: nodes
               });
             } catch (e) {
-              console.error("Prometheus Error:", e.message);
-              res.status(502).json({ error: "Błąd pobierania metryk" });
+              res.status(502).json({ error: "Błąd serwera statusu" });
             }
           });
 
@@ -92,7 +94,7 @@ spec:
             memory: 64Mi
           limits:
             cpu: 200m
-            memory: 256Mi
+            memory: 512Mi
 ---
 apiVersion: v1
 kind: Service
