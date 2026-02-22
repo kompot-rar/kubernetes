@@ -1,0 +1,78 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: status-proxy
+  namespace: monitoring
+  labels:
+    app: status-proxy
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: status-proxy
+  template:
+    metadata:
+      labels:
+        app: status-proxy
+    spec:
+      containers:
+      - name: proxy
+        image: node:18-alpine
+        command: ["sh", "-c"]
+        args:
+        - |
+          npm install express axios cors;
+          cat <<'EOF' > index.js
+          const express = require('express');
+          const axios = require('axios');
+          const cors = require('cors');
+          const app = express();
+          app.use(cors());
+
+          const PROM_URL = "http://monitoring-kube-prometheus-prometheus.monitoring.svc:9090/api/v1/query";
+
+          app.get('/api/status', async (req, res) => {
+            try {
+              const query = 'max(node_hwmon_temp_celsius) by (instance)';
+              const response = await axios.get(PROM_URL, { 
+                params: { query },
+                timeout: 5000 
+              });
+              
+              const data = response.data.data.result.map(r => ({
+                node: r.metric.instance,
+                temp: (r.value && r.value[1]) ? parseFloat(r.value[1]).toFixed(1) : "N/A"
+              }));
+              
+              res.json(data);
+            } catch (e) {
+              console.error("Prometheus Error:", e.message);
+              res.status(502).json({ error: "Błąd komunikacji z Prometheusem" });
+            }
+          });
+
+          app.get('/health', (req, res) => res.send('OK'));
+          app.listen(3000, () => console.log('Status Proxy listening on port 3000'));
+          EOF
+          node index.js
+        ports:
+        - containerPort: 3000
+        resources:
+          requests:
+            cpu: 10m
+            memory: 64Mi
+          limits:
+            cpu: 100m
+            memory: 128Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: status-proxy
+  namespace: monitoring
+spec:
+  selector:
+    app: status-proxy
+  ports:
+  - port: 80
+    targetPort: 3000
