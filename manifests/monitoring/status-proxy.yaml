@@ -46,7 +46,7 @@ spec:
 
           app.get('/api/status', async (req, res) => {
             try {
-              const [temp, pods, ram, cpu, uptime, restarts24h, unhealthyPods, argoSync] = await Promise.all([
+              const [temp, pods, ram, cpu, uptime, restarts24h, unhealthyPods, argoSync, chaosSectors, chaosErrors, chaosWear, chaosWriteLat, chaosInfo, chaosEvents, chaosReportedUncorrect, chaosSmartHealthy] = await Promise.all([
                 queryProm('max(node_hwmon_temp_celsius) by (instance)'),
                 queryProm('sum(kube_pod_status_phase{phase="Running"})'),
                 queryProm('100 * (1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes))'),
@@ -54,7 +54,16 @@ spec:
                 queryProm('time() - node_boot_time_seconds'),
                 queryProm('sum(increase(kube_pod_container_status_restarts_total[24h]))'),
                 queryProm('sum(kube_pod_status_phase{phase=~"Failed|Pending|Unknown"})'),
-                queryProm('count(argocd_app_info{sync_status="Synced"})')
+                queryProm('count(argocd_app_info{sync_status="Synced"})'),
+                // Chaos Monkey: Trash Disk Metrics (Crucial MX300 on 10.0.10.13)
+                queryProm('smartmon_reallocated_sector_count_raw_value{instance="10.0.10.13:9100", disk="/dev/sda"}'),
+                queryProm('smartmon_offline_uncorrectable_raw_value{instance="10.0.10.13:9100", disk="/dev/sda"}'),
+                queryProm('smartmon_wear_leveling_count_raw_value{instance="10.0.10.13:9100", disk="/dev/sda"}'),
+                queryProm('rate(node_disk_write_time_seconds_total{instance="10.0.10.13:9100", device="sda"}[5m])'),
+                queryProm('smartmon_device_info{instance="10.0.10.13:9100", disk="/dev/sda"}'),
+                queryProm('smartmon_reallocated_event_count_raw_value{instance="10.0.10.13:9100", disk="/dev/sda"}'),
+                queryProm('smartmon_reported_uncorrect_raw_value{instance="10.0.10.13:9100", disk="/dev/sda"}'),
+                queryProm('smartmon_device_smart_healthy{instance="10.0.10.13:9100", disk="/dev/sda"}')
               ]);
 
               const nodes = temp.map((t) => {
@@ -72,6 +81,30 @@ spec:
                 };
               });
 
+              // Chaos Monkey Logic
+              const sectors = chaosSectors[0] ? parseInt(chaosSectors[0].value[1]) : 0;
+              const errors = chaosErrors[0] ? parseInt(chaosErrors[0].value[1]) : 0;
+              const wear = chaosWear[0] ? parseInt(chaosWear[0].value[1]) : 0;
+              const writeLat = chaosWriteLat[0] ? parseFloat(chaosWriteLat[0].value[1]) : 0;
+              const info = chaosInfo[0] ? chaosInfo[0].metric : {};
+              const events = chaosEvents[0] ? parseInt(chaosEvents[0].value[1]) : 0;
+              const reportedUncorrect = chaosReportedUncorrect[0] ? parseInt(chaosReportedUncorrect[0].value[1]) : 0;
+              const isSmartHealthy = chaosSmartHealthy[0] ? parseInt(chaosSmartHealthy[0].value[1]) === 1 : false;
+
+              let chaosStatus = "Stable (For a dumpster disk)";
+              let chaosNote = "Running on salvaged hardware. No data is safe here.";
+              
+              if (reportedUncorrect > 1000) {
+                chaosStatus = "Radioactive (ECC Failure)";
+                chaosNote = "Massive hardware ECC errors. Bit-rot is actively occurring.";
+              } else if (errors > 0) {
+                chaosStatus = "Dying (Data Loss Detected)";
+                chaosNote = "Uncorrectable sectors found. SMART self-test is screaming.";
+              } else if (writeLat > 0.5) {
+                chaosStatus = "Throttling (Floppy Disk Mode)";
+                chaosNote = "High write latency detected. Controller struggling with bad cells.";
+              }
+
               const restartCount = restarts24h[0] ? Math.round(parseFloat(restarts24h[0].value[1])) : 0;
               const unhealthyCount = unhealthyPods[0] ? parseInt(unhealthyPods[0].value[1]) : 0;
               const isSynced = argoSync[0] ? parseInt(argoSync[0].value[1]) > 0 : false;
@@ -82,9 +115,6 @@ spec:
               if (unhealthyCount > 0) {
                 clusterStatus = "Warning";
                 statusMessage = `Self-healing active: ${unhealthyCount} pod(s) recovering.`;
-              } else if (restartCount > 2) {
-                clusterStatus = "Observed";
-                statusMessage = "Recent node pressure detected. Automated recovery successful.";
               }
 
               res.json({
@@ -92,9 +122,25 @@ spec:
                   totalPods: pods[0] ? pods[0].value[1] : "0",
                   status: clusterStatus,
                   message: statusMessage,
-                  restarts24h: restartCount,
                   gitops: isSynced ? "Synced" : "Out of Sync",
                   lastUpdate: new Date().toISOString()
+                },
+                chaos_monkey_audit: {
+                  target: info.device_model || "Crucial_MX300 (Dumpster)",
+                  serial: info.serial_number || "N/A",
+                  node: "10.0.10.13",
+                  health_status: chaosStatus,
+                  firmware_verdict: isSmartHealthy ? "PASSED (Optimistic)" : "FAILED (Critical)",
+                  alert_level: reportedUncorrect > 0 ? "Radioactive" : (errors > 0 ? "Critical" : (sectors > 0 || events > 0 ? "Warning" : "Nominal")),
+                  metrics: {
+                    reallocated_sectors: sectors,
+                    reallocated_events: events,
+                    offline_uncorrectable: errors,
+                    reported_uncorrectable_ecc: reportedUncorrect,
+                    ssd_wear_cycles: wear,
+                    avg_write_lat_sec: writeLat.toFixed(4)
+                  },
+                  sre_message: chaosNote
                 },
                 nodes: nodes
               });
