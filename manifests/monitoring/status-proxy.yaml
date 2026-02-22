@@ -46,13 +46,13 @@ spec:
 
           app.get('/api/status', async (req, res) => {
             try {
-              const [temp, pods, ram, cpu, uptime, restarts1h, unhealthyPods, argoSync] = await Promise.all([
+              const [temp, pods, ram, cpu, uptime, restarts24h, unhealthyPods, argoSync] = await Promise.all([
                 queryProm('max(node_hwmon_temp_celsius) by (instance)'),
                 queryProm('sum(kube_pod_status_phase{phase="Running"})'),
                 queryProm('100 * (1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes))'),
                 queryProm('100 - (avg by (instance) (irate(node_cpu_seconds_total{mode="idle"}[5m])) * 100)'),
                 queryProm('time() - node_boot_time_seconds'),
-                queryProm('sum(increase(kube_pod_container_status_restarts_total[1h]))'),
+                queryProm('sum(increase(kube_pod_container_status_restarts_total[24h]))'),
                 queryProm('sum(kube_pod_status_phase{phase=~"Failed|Pending|Unknown"})'),
                 queryProm('count(argocd_app_info{sync_status="Synced"})')
               ]);
@@ -72,8 +72,7 @@ spec:
                 };
               });
 
-              // Logika "Rekruter-Ready" v2.1
-              const restartCount = restarts1h[0] ? Math.round(parseFloat(restarts1h[0].value[1])) : 0;
+              const restartCount = restarts24h[0] ? Math.round(parseFloat(restarts24h[0].value[1])) : 0;
               const unhealthyCount = unhealthyPods[0] ? parseInt(unhealthyPods[0].value[1]) : 0;
               const isSynced = argoSync[0] ? parseInt(argoSync[0].value[1]) > 0 : false;
               
@@ -93,7 +92,7 @@ spec:
                   totalPods: pods[0] ? pods[0].value[1] : "0",
                   status: clusterStatus,
                   message: statusMessage,
-                  restarts1h: restartCount,
+                  restarts24h: restartCount,
                   gitops: isSynced ? "Synced" : "Out of Sync",
                   lastUpdate: new Date().toISOString()
                 },
@@ -105,7 +104,7 @@ spec:
           });
 
           app.get('/health', (req, res) => res.send('OK'));
-          app.listen(3000, () => console.log('Super-Status Proxy v2.1 (ArgoCD & Fix) listening on port 3000'));
+          app.listen(3000, () => console.log('Super-Status Proxy v2.2 (24h Window) listening on port 3000'));
           EOF
           node index.js
         ports:
