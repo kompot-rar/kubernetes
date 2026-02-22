@@ -1,199 +1,24 @@
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
-  annotations:
-    kubectl.kubernetes.io/last-applied-configuration: |
-      {"apiVersion":"argoproj.io/v1alpha1","kind":"Application","metadata":{"annotations":{},"finalizers":["resources-finalizer.argocd.argoproj.io"],"labels":{"app.kubernetes.io/instance":"root-app"},"name":"status-proxy","namespace":"argocd"},"spec":{"destination":{"namespace":"monitoring","server":"https://kubernetes.default.svc"},"project":"default","source":{"directory":{"recurse":false},"path":"manifests/monitoring","repoURL":"https://github.com/kompot-rar/kubernetes.git","targetRevision":"HEAD"},"syncPolicy":{"automated":{"prune":true,"selfHeal":true},"syncOptions":["CreateNamespace=true"]}}}
-  finalizers:
-  - resources-finalizer.argocd.argoproj.io
-  labels:
-    app.kubernetes.io/instance: root-app
   name: status-proxy
   namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
 spec:
-  destination:
-    namespace: monitoring
-    server: https://kubernetes.default.svc
   project: default
   source:
-    path: manifests/monitoring
     repoURL: https://github.com/kompot-rar/kubernetes.git
     targetRevision: HEAD
+    path: manifests/monitoring
+    directory:
+      recurse: false
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: monitoring
   syncPolicy:
     automated:
       prune: true
       selfHeal: true
     syncOptions:
-    - CreateNamespace=true
-status:
-  controllerNamespace: argocd
-  health:
-    status: Healthy
-  history:
-  - deployStartedAt: "2026-02-22T09:24:31Z"
-    deployedAt: "2026-02-22T09:24:32Z"
-    id: 0
-    initiatedBy:
-      automated: true
-    revision: 4daf374880a3890d7850bf11947a8846e06615d0
-    source:
-      path: manifests/monitoring
-      repoURL: https://github.com/kompot-rar/kubernetes.git
-      targetRevision: HEAD
-  - deployStartedAt: "2026-02-22T09:34:35Z"
-    deployedAt: "2026-02-22T09:34:36Z"
-    id: 1
-    initiatedBy:
-      automated: true
-    revision: 6e0c7635438e9b883f2cfa3c8e4bdab8c53b4c0e
-    source:
-      path: manifests/monitoring
-      repoURL: https://github.com/kompot-rar/kubernetes.git
-      targetRevision: HEAD
-  - deployStartedAt: "2026-02-22T09:39:50Z"
-    deployedAt: "2026-02-22T09:39:51Z"
-    id: 2
-    initiatedBy:
-      automated: true
-    revision: cd2148da4d0ccf4cb76582ef74f88f0f1a8115a5
-    source:
-      path: manifests/monitoring
-      repoURL: https://github.com/kompot-rar/kubernetes.git
-      targetRevision: HEAD
-  - deployStartedAt: "2026-02-22T09:57:45Z"
-    deployedAt: "2026-02-22T09:57:46Z"
-    id: 3
-    initiatedBy:
-      automated: true
-    revision: f564ebbd7f2eb13019ced74b617c332658de716b
-    source:
-      path: manifests/monitoring
-      repoURL: https://github.com/kompot-rar/kubernetes.git
-      targetRevision: HEAD
-  - deployStartedAt: "2026-02-22T10:19:24Z"
-    deployedAt: "2026-02-22T10:19:26Z"
-    id: 4
-    initiatedBy:
-      automated: true
-    revision: 3b9672ed5c0849e524b973b0b844f7d3cd6d1993
-    source:
-      path: manifests/monitoring
-      repoURL: https://github.com/kompot-rar/kubernetes.git
-      targetRevision: HEAD
-  - deployStartedAt: "2026-02-22T11:19:57Z"
-    deployedAt: "2026-02-22T11:19:58Z"
-    id: 5
-    initiatedBy:
-      automated: true
-    revision: 6ca2b748e9d0323d0f8ff5bb490973464dbf3fd0
-    source:
-      path: manifests/monitoring
-      repoURL: https://github.com/kompot-rar/kubernetes.git
-      targetRevision: HEAD
-  - deployStartedAt: "2026-02-22T11:31:58Z"
-    deployedAt: "2026-02-22T11:31:59Z"
-    id: 6
-    initiatedBy:
-      automated: true
-    revision: 294f4435a1ef3afa3861ca26f8b7b033ea418121
-    source:
-      path: manifests/monitoring
-      repoURL: https://github.com/kompot-rar/kubernetes.git
-      targetRevision: HEAD
-  - deployStartedAt: "2026-02-22T11:33:30Z"
-    deployedAt: "2026-02-22T11:33:33Z"
-    id: 7
-    initiatedBy:
-      automated: true
-    revision: e27e3ef0ea0666897cf80855b34096336f5661a5
-    source:
-      path: manifests/monitoring
-      repoURL: https://github.com/kompot-rar/kubernetes.git
-      targetRevision: HEAD
-  operationState:
-    finishedAt: "2026-02-22T11:33:33Z"
-    message: successfully synced (all tasks run)
-    operation:
-      initiatedBy:
-        automated: true
-      retry:
-        limit: 5
-      sync:
-        prune: true
-        revision: e27e3ef0ea0666897cf80855b34096336f5661a5
-        syncOptions:
-        - CreateNamespace=true
-    phase: Succeeded
-    startedAt: "2026-02-22T11:33:30Z"
-    syncResult:
-      resources:
-      - group: ""
-        hookPhase: Running
-        kind: Service
-        message: service/status-proxy unchanged
-        name: status-proxy
-        namespace: monitoring
-        status: Synced
-        syncPhase: Sync
-        version: v1
-      - group: apps
-        hookPhase: Running
-        kind: Deployment
-        message: deployment.apps/status-proxy unchanged
-        name: status-proxy
-        namespace: monitoring
-        status: Synced
-        syncPhase: Sync
-        version: v1
-      - group: monitoring.coreos.com
-        hookPhase: Running
-        kind: ServiceMonitor
-        message: servicemonitor.monitoring.coreos.com/argocd-metrics configured
-        name: argocd-metrics
-        namespace: monitoring
-        status: Synced
-        syncPhase: Sync
-        version: v1
-      revision: e27e3ef0ea0666897cf80855b34096336f5661a5
-      source:
-        path: manifests/monitoring
-        repoURL: https://github.com/kompot-rar/kubernetes.git
-        targetRevision: HEAD
-  reconciledAt: "2026-02-22T11:41:40Z"
-  resources:
-  - health:
-      status: Healthy
-    kind: Service
-    name: status-proxy
-    namespace: monitoring
-    status: Synced
-    version: v1
-  - group: apps
-    health:
-      status: Healthy
-    kind: Deployment
-    name: status-proxy
-    namespace: monitoring
-    status: Synced
-    version: v1
-  - group: monitoring.coreos.com
-    kind: ServiceMonitor
-    name: argocd-metrics
-    namespace: monitoring
-    status: Synced
-    version: v1
-  sourceType: Directory
-  summary:
-    images:
-    - node:18-alpine
-  sync:
-    comparedTo:
-      destination:
-        namespace: monitoring
-        server: https://kubernetes.default.svc
-      source:
-        path: manifests/monitoring
-        repoURL: https://github.com/kompot-rar/kubernetes.git
-        targetRevision: HEAD
-    revision: e27e3ef0ea0666897cf80855b34096336f5661a5
-    status: Synced
+      - CreateNamespace=true
