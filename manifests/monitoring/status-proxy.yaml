@@ -18,10 +18,13 @@ spec:
       containers:
       - name: proxy
         image: node:18-alpine
+        workingDir: /app
         command: ["sh", "-c"]
         args:
         - |
-          npm install express axios cors;
+          cd /app && \
+          npm init -y && \
+          npm install express axios cors && \
           cat <<'EOF' > index.js
           const express = require('express');
           const axios = require('axios');
@@ -63,16 +66,4 @@ spec:
             memory: 64Mi
           limits:
             cpu: 100m
-            memory: 128Mi
----
-apiVersion: v1
-kind: Service
-metadata:
-  name: status-proxy
-  namespace: monitoring
-spec:
-  selector:
-    app: status-proxy
-  ports:
-  - port: 80
-    targetPort: 3000
+            memory: 256Mi # Zwiększam RAM dla npm install
