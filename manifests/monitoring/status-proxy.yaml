@@ -195,13 +195,18 @@ spec:
                   queryProm('smartmon_reported_uncorrect_raw_value{instance="10.0.10.13:9100", disk="/dev/sda"}'),
                   queryProm('smartmon_device_smart_healthy{instance="10.0.10.13:9100", disk="/dev/sda"}'),
                   queryProm('smartmon_percent_lifetime_remain_raw_value{instance="10.0.10.13:9100", disk="/dev/sda"}'),
-                  queryProm('smartmon_power_on_hours_raw_value{instance="10.0.10.13:9100", disk="/dev/sda"}')
+                  queryProm('smartmon_power_on_hours_raw_value{instance="10.0.10.13:9100", disk="/dev/sda"}'),
+                  // Cluster Stats (Pressure & Network)
+                  queryProm('(sum(kube_pod_container_resource_requests{resource="cpu"}) / sum(kube_node_status_allocatable{resource="cpu"})) * 100'),
+                  queryProm('(sum(kube_pod_container_resource_requests{resource="memory"}) / sum(kube_node_status_allocatable{resource="memory"})) * 100'),
+                  queryProm('sum(rate(node_network_receive_bytes_total{device!="lo"}[2m]))'),
+                  queryProm('sum(rate(node_network_transmit_bytes_total{device!="lo"}[2m]))')
                 ]),
                 getGitHubStatus(),
                 getArgoApps()
               ]);
 
-              const [temp, pods, ram, cpu, uptime, restarts24h, unhealthyPods, argoSync, chaosSectors, chaosErrors, chaosWear, chaosWriteLat, chaosInfo, chaosEvents, chaosReportedUncorrect, chaosSmartHealthy, chaosLifeRemain, chaosPowerHours] = promData;
+              const [temp, pods, ram, cpu, uptime, restarts24h, unhealthyPods, argoSync, chaosSectors, chaosErrors, chaosWear, chaosWriteLat, chaosInfo, chaosEvents, chaosReportedUncorrect, chaosSmartHealthy, chaosLifeRemain, chaosPowerHours, cpuPressure, memPressure, netRx, netTx] = promData;
 
               const nodes = temp.map((t) => {
                 const instance = t.metric.instance;
@@ -265,7 +270,13 @@ spec:
                   status: clusterStatus,
                   message: statusMessage,
                   gitops: isSynced ? "Synced" : "Out of Sync",
-                  lastUpdate: new Date().toISOString()
+                  lastUpdate: new Date().toISOString(),
+                  stats: {
+                    cpu_pressure: cpuPressure[0] ? parseFloat(cpuPressure[0].value[1]).toFixed(1) : "0",
+                    memory_pressure: memPressure[0] ? parseFloat(memPressure[0].value[1]).toFixed(1) : "0",
+                    network_rx_mbps: netRx[0] ? (parseFloat(netRx[0].value[1]) / 1024 / 1024 * 8).toFixed(2) : "0",
+                    network_tx_mbps: netTx[0] ? (parseFloat(netTx[0].value[1]) / 1024 / 1024 * 8).toFixed(2) : "0"
+                  }
                 },
                 chaos_monkey_audit: {
                   target: info.device_model || "Crucial_MX300 (Dumpster)",
