@@ -19,6 +19,12 @@ spec:
       - name: proxy
         image: node:18-alpine
         workingDir: /app
+        env:
+        - name: GITHUB_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: github-token
+              key: token
         command: ["sh", "-c"]
         args:
         - |
@@ -33,6 +39,16 @@ spec:
           app.use(cors());
 
           const PROM_URL = "http://monitoring-kube-prometheus-prometheus.monitoring.svc:9090/api/v1/query";
+          const GITHUB_REPO = "kompot-rar/Vibe_devops";
+          const GITHUB_TOKEN = process.env.GITHUB_TOKEN;
+
+          const githubClient = axios.create({
+            baseURL: "https://api.github.com",
+            headers: {
+              "Accept": "application/vnd.github.v3+json",
+              ...(GITHUB_TOKEN && { "Authorization": `Bearer ${GITHUB_TOKEN}` })
+            }
+          });
 
           const queryProm = async (q) => {
             try {
@@ -44,29 +60,103 @@ spec:
             }
           };
 
+          const getGitHubStatus = async () => {
+            try {
+              if (!GITHUB_TOKEN) console.warn("Missing GITHUB_TOKEN, rate limits may apply or private repos will fail.");
+              
+              // Get latest run
+              const runsRes = await githubClient.get(`/repos/${GITHUB_REPO}/actions/runs`, {
+                params: { per_page: 1, branch: "main" }
+              });
+              
+              if (!runsRes.data.workflow_runs || runsRes.data.workflow_runs.length === 0) {
+                return { run: null, jobs: [] };
+              }
+
+              const latestRun = runsRes.data.workflow_runs[0];
+
+              // Get jobs for this run
+              const jobsRes = await githubClient.get(latestRun.jobs_url);
+              
+              const runData = {
+                id: latestRun.id,
+                name: latestRun.name,
+                status: latestRun.status,
+                conclusion: latestRun.conclusion,
+                head_sha: latestRun.head_sha,
+                head_commit: {
+                  message: latestRun.head_commit ? latestRun.head_commit.message : "No message",
+                  author: { name: latestRun.head_commit ? latestRun.head_commit.author.name : "Unknown" },
+                  timestamp: latestRun.head_commit ? latestRun.head_commit.timestamp : latestRun.created_at
+                },
+                created_at: latestRun.created_at,
+                updated_at: latestRun.updated_at,
+                html_url: latestRun.html_url
+              };
+
+              const jobsData = (jobsRes.data.jobs || []).map(job => ({
+                id: job.id,
+                name: job.name,
+                status: job.status,
+                conclusion: job.conclusion,
+                html_url: job.html_url,
+                steps: job.steps.map(step => ({
+                  name: step.name,
+                  number: step.number,
+                  status: step.status,
+                  conclusion: step.conclusion,
+                  started_at: step.started_at,
+                  completed_at: step.completed_at
+                }))
+              }));
+
+              return { run: runData, jobs: jobsData };
+
+            } catch (e) {
+              console.error("GitHub API Error:", e.message);
+              // Return placeholder structure on error to prevent UI crash
+              return { 
+                run: { 
+                  status: "unknown", 
+                  conclusion: "failure", 
+                  error: "Failed to fetch from GitHub" 
+                }, 
+                jobs: [] 
+              };
+            }
+          };
+
           app.get('/api/status', async (req, res) => {
             try {
-              const [temp, pods, ram, cpu, uptime, restarts24h, unhealthyPods, argoSync, chaosSectors, chaosErrors, chaosWear, chaosWriteLat, chaosInfo, chaosEvents, chaosReportedUncorrect, chaosSmartHealthy, chaosLifeRemain, chaosPowerHours] = await Promise.all([
-                queryProm('max(node_hwmon_temp_celsius) by (instance)'),
-                queryProm('sum(kube_pod_status_phase{phase="Running"})'),
-                queryProm('100 * (1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes))'),
-                queryProm('100 - (avg by (instance) (irate(node_cpu_seconds_total{mode="idle"}[5m])) * 100)'),
-                queryProm('time() - node_boot_time_seconds'),
-                queryProm('sum(increase(kube_pod_container_status_restarts_total[24h]))'),
-                queryProm('sum(kube_pod_status_phase{phase=~"Failed|Pending|Unknown"})'),
-                queryProm('count(argocd_app_info{sync_status="Synced"})'),
-                // Chaos Monkey: Trash Disk Metrics (Crucial MX300 on 10.0.10.13)
-                queryProm('smartmon_reallocated_sector_count_raw_value{instance="10.0.10.13:9100", disk="/dev/sda"}'),
-                queryProm('smartmon_offline_uncorrectable_raw_value{instance="10.0.10.13:9100", disk="/dev/sda"}'),
-                queryProm('smartmon_wear_leveling_count_raw_value{instance="10.0.10.13:9100", disk="/dev/sda"}'),
-                queryProm('rate(node_disk_write_time_seconds_total{instance="10.0.10.13:9100", device="sda"}[5m])'),
-                queryProm('smartmon_device_info{instance="10.0.10.13:9100", disk="/dev/sda"}'),
-                queryProm('smartmon_reallocated_event_count_raw_value{instance="10.0.10.13:9100", disk="/dev/sda"}'),
-                queryProm('smartmon_reported_uncorrect_raw_value{instance="10.0.10.13:9100", disk="/dev/sda"}'),
-                queryProm('smartmon_device_smart_healthy{instance="10.0.10.13:9100", disk="/dev/sda"}'),
-                queryProm('smartmon_percent_lifetime_remain_raw_value{instance="10.0.10.13:9100", disk="/dev/sda"}'),
-                queryProm('smartmon_power_on_hours_raw_value{instance="10.0.10.13:9100", disk="/dev/sda"}')
+              const [
+                promData,
+                githubData
+              ] = await Promise.all([
+                Promise.all([
+                  queryProm('max(node_hwmon_temp_celsius) by (instance)'),
+                  queryProm('sum(kube_pod_status_phase{phase="Running"})'),
+                  queryProm('100 * (1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes))'),
+                  queryProm('100 - (avg by (instance) (irate(node_cpu_seconds_total{mode="idle"}[5m])) * 100)'),
+                  queryProm('time() - node_boot_time_seconds'),
+                  queryProm('sum(increase(kube_pod_container_status_restarts_total[24h]))'),
+                  queryProm('sum(kube_pod_status_phase{phase=~"Failed|Pending|Unknown"})'),
+                  queryProm('count(argocd_app_info{sync_status="Synced"})'),
+                  // Chaos Monkey
+                  queryProm('smartmon_reallocated_sector_count_raw_value{instance="10.0.10.13:9100", disk="/dev/sda"}'),
+                  queryProm('smartmon_offline_uncorrectable_raw_value{instance="10.0.10.13:9100", disk="/dev/sda"}'),
+                  queryProm('smartmon_wear_leveling_count_raw_value{instance="10.0.10.13:9100", disk="/dev/sda"}'),
+                  queryProm('rate(node_disk_write_time_seconds_total{instance="10.0.10.13:9100", device="sda"}[5m])'),
+                  queryProm('smartmon_device_info{instance="10.0.10.13:9100", disk="/dev/sda"}'),
+                  queryProm('smartmon_reallocated_event_count_raw_value{instance="10.0.10.13:9100", disk="/dev/sda"}'),
+                  queryProm('smartmon_reported_uncorrect_raw_value{instance="10.0.10.13:9100", disk="/dev/sda"}'),
+                  queryProm('smartmon_device_smart_healthy{instance="10.0.10.13:9100", disk="/dev/sda"}'),
+                  queryProm('smartmon_percent_lifetime_remain_raw_value{instance="10.0.10.13:9100", disk="/dev/sda"}'),
+                  queryProm('smartmon_power_on_hours_raw_value{instance="10.0.10.13:9100", disk="/dev/sda"}')
+                ]),
+                getGitHubStatus()
               ]);
+
+              const [temp, pods, ram, cpu, uptime, restarts24h, unhealthyPods, argoSync, chaosSectors, chaosErrors, chaosWear, chaosWriteLat, chaosInfo, chaosEvents, chaosReportedUncorrect, chaosSmartHealthy, chaosLifeRemain, chaosPowerHours] = promData;
 
               const nodes = temp.map((t) => {
                 const instance = t.metric.instance;
@@ -151,49 +241,41 @@ spec:
                   },
                   sre_message: chaosNote
                 },
-                nodes: nodes
+                nodes: nodes,
+                run: githubData.run,
+                jobs: githubData.jobs
               });
             } catch (e) {
               res.status(502).json({ error: "Błąd serwera statusu", details: e.message });
             }
           });
 
-          app.get('/api/pipeline', (req, res) => {
-            res.json({
-              "run": {
-                "id": 123456,
-                "name": "Deploy",
-                "status": "completed",
-                "conclusion": "success",
-                "head_sha": "895481f...",
-                "head_commit": {
-                  "message": "fix(roadmap): ...",
-                  "author": { "name": "kompot-rar" },
-                  "timestamp": "2026-02-23T12:00:00Z"
-                },
-                "created_at": "2026-02-23T12:00:00Z",
-                "updated_at": "2026-02-23T12:04:32Z",
-                "html_url": "https://github.com/..."
-              },
-              "jobs": [
-                {
-                  "id": 789,
-                  "name": "build-and-deploy",
-                  "status": "completed",
-                  "conclusion": "success",
-                  "steps": [
-                    {
-                      "name": "Checkout code",
-                      "number": 1,
-                      "status": "completed",
-                      "conclusion": "success",
-                      "started_at": "2026-02-23T12:00:01Z",
-                      "completed_at": "2026-02-23T12:00:03Z"
-                    }
-                  ]
-                }
-              ]
-            });
+          app.get('/api/status/logs/:jobId', async (req, res) => {
+            const { jobId } = req.params;
+            try {
+              if (!GITHUB_TOKEN) {
+                 return res.status(500).json({ error: "Missing GITHUB_TOKEN" });
+              }
+
+              const logsRes = await githubClient.get(`/repos/${GITHUB_REPO}/actions/jobs/${jobId}/logs`, {
+                responseType: 'text'
+              });
+
+              // Process logs
+              const rawLogs = logsRes.data;
+              const allLines = rawLogs.split('\n');
+              
+              const cleanLines = allLines
+                .filter(line => !line.includes('##[debug]'))
+                .map(line => line.replace(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d+Z /, '')) // Remove ISO timestamp
+                .slice(0, 500); // Limit to 500 lines
+
+              res.json({ lines: cleanLines });
+
+            } catch (e) {
+              console.error(`Logs Error (${jobId}):`, e.message);
+              res.status(502).json({ error: "Failed to fetch logs", details: e.message });
+            }
           });
 
           app.get('/health', (req, res) => res.send('OK'));
