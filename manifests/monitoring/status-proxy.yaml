@@ -34,13 +34,13 @@ spec:
         - name: CF_API_TOKEN
           valueFrom:
             secretKeyRef:
-              name: cloudflare-api-token
+              name: cf-token
               key: token
               optional: true
         - name: CF_ZONE_ID
           valueFrom:
             secretKeyRef:
-              name: cloudflare-api-token
+              name: cf-token
               key: zone_id
               optional: true
         command: ["sh", "-c"]
