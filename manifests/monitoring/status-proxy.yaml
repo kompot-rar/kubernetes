@@ -183,7 +183,7 @@ spec:
             const dateGt = d.toISOString().split('T')[0];
 
             const query = `
-              query getZoneStats($zoneTag: string, $dateGt: date) {
+              query getZoneStats($zoneTag: String!, $dateGt: String!) {
                 viewer {
                   zones(filter: { zoneTag: $zoneTag }) {
                     httpRequests1dGroups(limit: 7, filter: { date_gt: $dateGt }) {
@@ -200,10 +200,6 @@ spec:
                         responseStatusMap {
                           requests
                           edgeResponseStatus
-                        }
-                        ipClassMap {
-                          requests
-                          ipClass
                         }
                       }
                       uniq {
@@ -244,7 +240,6 @@ spec:
               let error5xx = 0;
               let uniqueVisitors = 0;
               const countryMap = {};
-              const ipClassAgg = { human: 0, bot_good: 0, bot_bad: 0, other: 0 };
 
               groups.forEach(g => {
                 totalRequests += g.sum.requests || 0;
@@ -252,7 +247,7 @@ spec:
                 totalBytes += g.sum.bytes || 0;
                 cachedBytes += g.sum.cachedBytes || 0;
                 uniqueVisitors += g.uniq.uniques || 0;
-                
+
                 (g.sum.responseStatusMap || []).forEach(s => {
                   if (s.edgeResponseStatus >= 500 && s.edgeResponseStatus < 600) {
                     error5xx += s.requests;
@@ -261,19 +256,6 @@ spec:
 
                 (g.sum.countryMap || []).forEach(c => {
                   countryMap[c.clientCountryName] = (countryMap[c.clientCountryName] || 0) + c.requests;
-                });
-
-                (g.sum.ipClassMap || []).forEach(i => {
-                   const r = i.requests;
-                   if (i.ipClass === "clean" || i.ipClass === "unknown") {
-                     ipClassAgg.human += r;
-                   } else if (i.ipClass === "searchEngine" || i.ipClass === "monitoring") {
-                     ipClassAgg.bot_good += r;
-                   } else if (i.ipClass === "badHost" || i.ipClass === "scan" || i.ipClass === "tor") {
-                     ipClassAgg.bot_bad += r;
-                   } else {
-                     ipClassAgg.other += r;
-                   }
                 });
               });
 
@@ -297,8 +279,7 @@ spec:
                 },
                 traffic: {
                   unique_visitors_7d: uniqueVisitors,
-                  top_countries: topCountries,
-                  bot_management: ipClassAgg
+                  top_countries: topCountries
                 },
                 reliability: {
                   edge_error_rate_pct: errorRate,
