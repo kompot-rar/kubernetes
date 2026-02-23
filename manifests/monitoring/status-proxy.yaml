@@ -25,6 +25,12 @@ spec:
             secretKeyRef:
               name: github-token
               key: token
+        - name: ARGOCD_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: argocd-token
+              key: token
+              optional: true
         command: ["sh", "-c"]
         args:
         - |
@@ -35,12 +41,15 @@ spec:
           const express = require('express');
           const axios = require('axios');
           const cors = require('cors');
+          const https = require('https');
           const app = express();
           app.use(cors());
 
           const PROM_URL = "http://monitoring-kube-prometheus-prometheus.monitoring.svc:9090/api/v1/query";
           const GITHUB_REPO = "kompot-rar/Vibe_devops";
           const GITHUB_TOKEN = process.env.GITHUB_TOKEN;
+          const ARGOCD_URL = "https://argocd-server.argocd.svc"; // Internal Cluster URL
+          const ARGOCD_TOKEN = process.env.ARGOCD_TOKEN;
 
           const githubClient = axios.create({
             baseURL: "https://api.github.com",
@@ -50,12 +59,51 @@ spec:
             }
           });
 
+          const argoClient = axios.create({
+            baseURL: ARGOCD_URL,
+            httpsAgent: new https.Agent({  
+              rejectUnauthorized: false // Ignore self-signed certs internal to cluster
+            }),
+            headers: {
+              ...(ARGOCD_TOKEN && { "Authorization": `Bearer ${ARGOCD_TOKEN}` })
+            }
+          });
+
           const queryProm = async (q) => {
             try {
               const res = await axios.get(PROM_URL, { params: { query: q }, timeout: 5000 });
               return res.data.data.result;
             } catch (e) {
               console.error(`Query Error (${q}):`, e.message);
+              return [];
+            }
+          };
+
+          const getArgoApps = async () => {
+            try {
+              if (!ARGOCD_TOKEN) {
+                console.warn("Missing ARGOCD_TOKEN. App details will be unavailable.");
+                return [];
+              }
+              
+              const res = await argoClient.get('/api/v1/applications');
+              
+              if (!res.data.items) return [];
+
+              return res.data.items.map(app => ({
+                name: app.metadata.name,
+                status: app.status.health.status, // Healthy, Degraded, etc.
+                sync: app.status.sync.status,     // Synced, OutOfSync
+                revision: app.status.sync.revision ? app.status.sync.revision.substring(0, 7) : 'N/A',
+                last_deploy: app.status.history && app.status.history.length > 0 
+                  ? app.status.history[app.status.history.length - 1].deployedAt 
+                  : 'Never',
+                repo: app.spec.source.repoURL,
+                path: app.spec.source.path
+              }));
+
+            } catch (e) {
+              console.error("ArgoCD API Error:", e.message);
               return [];
             }
           };
@@ -114,13 +162,8 @@ spec:
 
             } catch (e) {
               console.error("GitHub API Error:", e.message);
-              // Return placeholder structure on error to prevent UI crash
               return { 
-                run: { 
-                  status: "unknown", 
-                  conclusion: "failure", 
-                  error: "Failed to fetch from GitHub" 
-                }, 
+                run: { status: "unknown", conclusion: "failure", error: "Failed to fetch from GitHub" }, 
                 jobs: [] 
               };
             }
@@ -130,7 +173,8 @@ spec:
             try {
               const [
                 promData,
-                githubData
+                githubData,
+                argoApps
               ] = await Promise.all([
                 Promise.all([
                   queryProm('max(node_hwmon_temp_celsius) by (instance)'),
@@ -153,7 +197,8 @@ spec:
                   queryProm('smartmon_percent_lifetime_remain_raw_value{instance="10.0.10.13:9100", disk="/dev/sda"}'),
                   queryProm('smartmon_power_on_hours_raw_value{instance="10.0.10.13:9100", disk="/dev/sda"}')
                 ]),
-                getGitHubStatus()
+                getGitHubStatus(),
+                getArgoApps()
               ]);
 
               const [temp, pods, ram, cpu, uptime, restarts24h, unhealthyPods, argoSync, chaosSectors, chaosErrors, chaosWear, chaosWriteLat, chaosInfo, chaosEvents, chaosReportedUncorrect, chaosSmartHealthy, chaosLifeRemain, chaosPowerHours] = promData;
@@ -243,7 +288,8 @@ spec:
                 },
                 nodes: nodes,
                 run: githubData.run,
-                jobs: githubData.jobs
+                jobs: githubData.jobs,
+                argocd_apps: argoApps
               });
             } catch (e) {
               res.status(502).json({ error: "Błąd serwera statusu", details: e.message });
@@ -276,6 +322,12 @@ spec:
               console.error(`Logs Error (${jobId}):`, e.message);
               res.status(502).json({ error: "Failed to fetch logs", details: e.message });
             }
+          });
+
+          // Dedicated endpoint for Argo Apps (optional usage)
+          app.get('/api/argocd/apps', async (req, res) => {
+             const apps = await getArgoApps();
+             res.json(apps);
           });
 
           app.get('/health', (req, res) => res.send('OK'));
