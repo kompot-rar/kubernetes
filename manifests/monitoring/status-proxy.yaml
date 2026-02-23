@@ -201,14 +201,6 @@ spec:
                           requests
                           edgeResponseStatus
                         }
-                        clientRequestHTTPProtocolMap {
-                          requests
-                          clientRequestHTTPProtocol
-                        }
-                        browserMap {
-                          requests
-                          uaBrowserFamily
-                        }
                       }
                       uniq {
                         uniques
@@ -230,6 +222,11 @@ spec:
                 }
               });
 
+              if (res.data.errors) {
+                console.error("Cloudflare GraphQL Error from API:", JSON.stringify(res.data.errors));
+                return null;
+              }
+
               const zones = res.data?.data?.viewer?.zones;
               if (!zones || zones.length === 0) return null;
               
@@ -243,8 +240,6 @@ spec:
               let error5xx = 0;
               let uniqueVisitors = 0;
               const countryMap = {};
-              const protocolMap = {};
-              const browserMapAgg = {};
 
               groups.forEach(g => {
                 totalRequests += g.sum.requests || 0;
@@ -262,14 +257,6 @@ spec:
                 (g.sum.countryMap || []).forEach(c => {
                   countryMap[c.clientCountryName] = (countryMap[c.clientCountryName] || 0) + c.requests;
                 });
-
-                (g.sum.clientRequestHTTPProtocolMap || []).forEach(p => {
-                  protocolMap[p.clientRequestHTTPProtocol] = (protocolMap[p.clientRequestHTTPProtocol] || 0) + p.requests;
-                });
-
-                (g.sum.browserMap || []).forEach(b => {
-                  browserMapAgg[b.uaBrowserFamily] = (browserMapAgg[b.uaBrowserFamily] || 0) + b.requests;
-                });
               });
 
               // Top 3 countries
@@ -277,16 +264,6 @@ spec:
                 .sort((a, b) => b[1] - a[1])
                 .slice(0, 3)
                 .map(c => c[0]);
-
-              // Protocol calculations
-              const http3Requests = protocolMap['HTTP/3'] || 0;
-              const http3Ratio = totalRequests > 0 ? ((http3Requests / totalRequests) * 100).toFixed(1) : "0.0";
-
-              // Top Browsers
-              const topBrowsers = Object.entries(browserMapAgg)
-                .sort((a, b) => b[1] - a[1])
-                .slice(0, 3)
-                .map(b => b[0]);
 
               const cacheRatio = totalBytes > 0 ? ((cachedBytes / totalBytes) * 100).toFixed(1) : "0.0";
               const errorRate = totalRequests > 0 ? ((error5xx / totalRequests) * 100).toFixed(2) : "0.00";
@@ -298,13 +275,11 @@ spec:
                 },
                 performance: {
                   cache_hit_ratio_pct: cacheRatio,
-                  saved_transfer_gb: savedTransferGB,
-                  http3_traffic_pct: http3Ratio
+                  saved_transfer_gb: savedTransferGB
                 },
                 traffic: {
                   unique_visitors_7d: uniqueVisitors,
-                  top_countries: topCountries,
-                  top_browsers: topBrowsers
+                  top_countries: topCountries
                 },
                 reliability: {
                   edge_error_rate_pct: errorRate,
