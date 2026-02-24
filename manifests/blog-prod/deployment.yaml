@@ -17,6 +17,18 @@ spec:
         app: blog-devops
         env: prod
     spec:
+      initContainers:
+      - name: init-config
+        image: busybox
+        command: ['sh', '-c', "mkdir -p /mnt/config && echo 'window.MY_POD_NAME = \"'$POD_NAME'\";' > /mnt/config/env.js"]
+        env:
+        - name: POD_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        volumeMounts:
+        - name: config-volume
+          mountPath: /mnt/config
       containers:
       - name: blog
         image: 10.0.20.50:5000/blog-devops:latest
@@ -32,6 +44,9 @@ spec:
               fieldPath: metadata.name
         ports:
         - containerPort: 80
+        volumeMounts:
+        - name: config-volume
+          mountPath: /usr/share/nginx/html/config
         resources:
           limits:
             cpu: "200m"
@@ -39,3 +54,6 @@ spec:
           requests:
             cpu: "100m"
             memory: "128Mi"
+      volumes:
+      - name: config-volume
+        emptyDir: {}
