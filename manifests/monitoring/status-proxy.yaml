@@ -451,6 +451,7 @@ spec:
                   lastUpdate: new Date().toISOString(),
                   restarts_24h: restartCount,
                   unhealthy_pods: unhealthyCount,
+                  incidents: incidents,
                   stats: {
                     cpu_pressure: cpuPressure[0] ? parseFloat(cpuPressure[0].value[1]).toFixed(1) : "0",
                     memory_pressure: memPressure[0] ? parseFloat(memPressure[0].value[1]).toFixed(1) : "0",
