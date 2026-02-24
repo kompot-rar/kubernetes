@@ -21,6 +21,14 @@ spec:
         image: node:18-alpine
         workingDir: /app
         env:
+        - name: NODE_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: spec.nodeName
+        - name: POD_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
         - name: GITHUB_TOKEN
           valueFrom:
             secretKeyRef:
@@ -446,18 +454,24 @@ spec:
                 jobs: githubData.jobs,
                 argocd_apps: argoApps,
                 topology: {
-                  nodes: (k8sNodesRes.data && k8sNodesRes.data.items ? k8sNodesRes.data.items : []).map(n => ({
-                    name: n.metadata.name,
-                    status: n.status && n.status.conditions ? (n.status.conditions.find(c => c.type === 'Ready') || {}).status || 'Unknown' : 'Unknown',
-                    roles: Object.keys(n.metadata.labels || {}).filter(l => l.startsWith('node-role.kubernetes.io/')).map(l => l.split('/')[1])
-                  })),
-                  pods: (k8sPodsRes.data && k8sPodsRes.data.items ? k8sPodsRes.data.items : []).map(p => ({
-                    name: p.metadata.name,
-                    namespace: p.metadata.namespace,
-                    nodeName: p.spec.nodeName,
-                    status: p.status ? p.status.phase : 'Unknown',
-                    labels: p.metadata.labels
-                  }))
+                  nodes: (k8sNodesRes.data && k8sNodesRes.data.items ? k8sNodesRes.data.items : []).map(n => {
+                    const nodeName = n.metadata.name;
+                    return {
+                      name: nodeName,
+                      status: n.status && n.status.conditions ? (n.status.conditions.find(c => c.type === 'Ready') || {}).status || 'Unknown' : 'Unknown',
+                      pods: (k8sPodsRes.data && k8sPodsRes.data.items ? k8sPodsRes.data.items : [])
+                        .filter(p => p.spec.nodeName === nodeName)
+                        .map(p => ({
+                          name: p.metadata.name,
+                          namespace: p.metadata.namespace,
+                          status: p.status ? p.status.phase : 'Unknown'
+                        }))
+                    };
+                  }),
+                  whoami: {
+                    pod: process.env.POD_NAME || 'status-proxy',
+                    node: process.env.NODE_NAME || 'unknown'
+                  }
                 }
               });
             } catch (e) {
