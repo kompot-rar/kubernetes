@@ -15,6 +15,7 @@ spec:
       labels:
         app: status-proxy
     spec:
+      serviceAccountName: status-proxy-sa
       containers:
       - name: proxy
         image: node:18-alpine
@@ -54,8 +55,19 @@ spec:
           const axios = require('axios');
           const cors = require('cors');
           const https = require('https');
+          const fs = require('fs');
           const app = express();
           app.use(cors());
+
+          // Kubernetes internal client
+          const K8S_URL = "https://kubernetes.default.svc";
+          let k8sToken = "";
+          try { k8sToken = fs.readFileSync('/var/run/secrets/kubernetes.io/serviceaccount/token', 'utf8'); } catch(e) {}
+          const k8sClient = axios.create({
+            baseURL: K8S_URL,
+            httpsAgent: new https.Agent({ rejectUnauthorized: false }),
+            headers: { "Authorization": `Bearer ${k8sToken}` }
+          });
 
           const PROM_URL = "http://monitoring-kube-prometheus-prometheus.monitoring.svc:9090/api/v1/query";
           const GITHUB_REPO = "kompot-rar/Vibe_devops";
@@ -298,7 +310,9 @@ spec:
                 promData,
                 githubData,
                 argoApps,
-                cloudflareData
+                cloudflareData,
+                k8sNodesRes,
+                k8sPodsRes
               ] = await Promise.all([
                 Promise.all([
                   queryProm('max(node_hwmon_temp_celsius) by (instance)'),
@@ -328,7 +342,9 @@ spec:
                 ]),
                 getGitHubStatus(),
                 getArgoApps(),
-                getCloudflareStats()
+                getCloudflareStats(),
+                k8sToken ? k8sClient.get('/api/v1/nodes').catch(() => ({ data: { items: [] } })) : Promise.resolve({ data: { items: [] } }),
+                k8sToken ? k8sClient.get('/api/v1/pods').catch(() => ({ data: { items: [] } })) : Promise.resolve({ data: { items: [] } })
               ]);
 
               const [temp, pods, ram, cpu, uptime, restarts24h, unhealthyPods, argoSync, chaosSectors, chaosErrors, chaosWear, chaosWriteLat, chaosInfo, chaosEvents, chaosReportedUncorrect, chaosSmartHealthy, chaosLifeRemain, chaosPowerHours, cpuPressure, memPressure, netRx, netTx] = promData;
@@ -428,7 +444,21 @@ spec:
                 nodes: nodes,
                 run: githubData.run,
                 jobs: githubData.jobs,
-                argocd_apps: argoApps
+                argocd_apps: argoApps,
+                topology: {
+                  nodes: (k8sNodesRes.data && k8sNodesRes.data.items ? k8sNodesRes.data.items : []).map(n => ({
+                    name: n.metadata.name,
+                    status: n.status && n.status.conditions ? (n.status.conditions.find(c => c.type === 'Ready') || {}).status || 'Unknown' : 'Unknown',
+                    roles: Object.keys(n.metadata.labels || {}).filter(l => l.startsWith('node-role.kubernetes.io/')).map(l => l.split('/')[1])
+                  })),
+                  pods: (k8sPodsRes.data && k8sPodsRes.data.items ? k8sPodsRes.data.items : []).map(p => ({
+                    name: p.metadata.name,
+                    namespace: p.metadata.namespace,
+                    nodeName: p.spec.nodeName,
+                    status: p.status ? p.status.phase : 'Unknown',
+                    labels: p.metadata.labels
+                  }))
+                }
               });
             } catch (e) {
               res.status(502).json({ error: "Błąd serwera statusu", details: e.message });
