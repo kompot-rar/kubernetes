@@ -312,6 +312,33 @@ spec:
             }
           };
 
+          const getRecentIncidents = async () => {
+            try {
+              if (!k8sToken) return [];
+              const res = await k8sClient.get('/api/v1/events');
+              if (!res.data.items) return [];
+
+              const incidentReasons = ['Unhealthy', 'BackOff', 'Failed', 'Killing', 'Evicted', 'FailedScheduling'];
+              
+              return res.data.items
+                .filter(e => incidentReasons.includes(e.reason) || e.type === 'Warning')
+                .map(e => ({
+                  type: e.type,
+                  reason: e.reason,
+                  message: e.message,
+                  object: `${e.involvedObject.kind}/${e.involvedObject.name}`,
+                  namespace: e.involvedObject.namespace,
+                  count: e.count,
+                  last_timestamp: e.lastTimestamp || e.eventTime || e.firstTimestamp
+                }))
+                .sort((a, b) => new Date(b.last_timestamp) - new Date(a.last_timestamp))
+                .slice(0, 5);
+            } catch (e) {
+              console.error("K8s Events API Error:", e.message);
+              return [];
+            }
+          };
+
           app.get('/api/status', async (req, res) => {
             try {
               const [
@@ -320,7 +347,8 @@ spec:
                 argoApps,
                 cloudflareData,
                 k8sNodesRes,
-                k8sPodsRes
+                k8sPodsRes,
+                incidents
               ] = await Promise.all([
                 Promise.all([
                   queryProm('max(node_hwmon_temp_celsius) by (instance)'),
@@ -352,7 +380,8 @@ spec:
                 getArgoApps(),
                 getCloudflareStats(),
                 k8sToken ? k8sClient.get('/api/v1/nodes').catch(() => ({ data: { items: [] } })) : Promise.resolve({ data: { items: [] } }),
-                k8sToken ? k8sClient.get('/api/v1/pods').catch(() => ({ data: { items: [] } })) : Promise.resolve({ data: { items: [] } })
+                k8sToken ? k8sClient.get('/api/v1/pods').catch(() => ({ data: { items: [] } })) : Promise.resolve({ data: { items: [] } }),
+                getRecentIncidents()
               ]);
 
               const [temp, pods, ram, cpu, uptime, restarts24h, unhealthyPods, argoSync, chaosSectors, chaosErrors, chaosWear, chaosWriteLat, chaosInfo, chaosEvents, chaosReportedUncorrect, chaosSmartHealthy, chaosLifeRemain, chaosPowerHours, cpuPressure, memPressure, netRx, netTx] = promData;
@@ -429,6 +458,7 @@ spec:
                     network_tx_mbps: netTx[0] ? (parseFloat(netTx[0].value[1]) / 1024 / 1024 * 8).toFixed(2) : "0"
                   }
                 },
+                incidents: incidents,
                 chaos_monkey_audit: {
                   target: info.device_model || "Crucial_MX300 (Dumpster)",
                   serial: info.serial_number || "N/A",
