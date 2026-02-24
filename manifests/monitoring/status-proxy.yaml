@@ -543,6 +543,63 @@ spec:
              res.json(apps);
           });
 
+          // Diagnostic endpoint for pod restarts
+          app.get('/api/status/restart-reason/:podName', async (req, res) => {
+            const { podName } = req.params;
+            try {
+              if (!k8sToken) return res.status(500).json({ error: "K8s Token missing" });
+
+              // 1. Get Pod details to find namespace and termination state
+              const allPodsRes = await k8sClient.get('/api/v1/pods');
+              const pod = allPodsRes.data.items.find(p => p.metadata.name === podName);
+
+              if (!pod) return res.status(404).json({ error: "Pod not found" });
+
+              const namespace = pod.metadata.namespace;
+              const containerStatuses = pod.status.containerStatuses || [];
+              
+              // We look for the first container that has a non-empty lastState.terminated
+              const lastState = containerStatuses
+                .map(c => c.lastState ? c.lastState.terminated : null)
+                .find(t => t != null);
+
+              // 2. Get specific events for this pod
+              const eventsRes = await k8sClient.get(`/api/v1/namespaces/${namespace}/events`, {
+                params: { fieldSelector: `involvedObject.name=${podName}` }
+              });
+
+              const recentEvents = (eventsRes.data.items || [])
+                .map(e => ({
+                  type: e.type,
+                  reason: e.reason,
+                  message: e.message,
+                  count: e.count,
+                  last_seen: e.lastTimestamp || e.eventTime || e.firstTimestamp
+                }))
+                .sort((a, b) => new Date(b.last_seen) - new Date(a.last_seen))
+                .slice(0, 10);
+
+              res.json({
+                pod_name: podName,
+                namespace: namespace,
+                diagnostic: {
+                  last_termination: lastState ? {
+                    reason: lastState.reason,
+                    exit_code: lastState.exitCode,
+                    started_at: lastState.startedAt,
+                    finished_at: lastState.finishedAt,
+                    container_id: lastState.containerID
+                  } : null,
+                  recent_events: recentEvents
+                }
+              });
+
+            } catch (e) {
+              console.error(`Diagnostic Error (${podName}):`, e.message);
+              res.status(502).json({ error: "Failed to fetch diagnostic data", details: e.message });
+            }
+          });
+
           app.get('/health', (req, res) => res.send('OK'));
           app.listen(3000, () => console.log('Super-Status Proxy v2.2 (24h Window) listening on port 3000'));
           EOF
