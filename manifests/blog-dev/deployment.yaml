@@ -4,6 +4,8 @@ metadata:
   name: blog-devops-dev
   namespace: blog
   labels:
+      annotations:
+        vibe-devops/restartedAt: "2026-02-24T21:07:27Z"
     app: blog-devops
     env: dev
 spec:
@@ -15,6 +17,8 @@ spec:
   template:
     metadata:
       labels:
+      annotations:
+        vibe-devops/restartedAt: "2026-02-24T21:07:27Z"
         app: blog-devops
         env: dev
     spec:
