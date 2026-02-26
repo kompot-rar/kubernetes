@@ -23,7 +23,7 @@ spec:
         
         prometheus:
           prometheusSpec:
-            retention: 10d
+            retention: 30d
             serviceMonitorSelectorNilUsesHelmValues: false
             
             additionalScrapeConfigs:

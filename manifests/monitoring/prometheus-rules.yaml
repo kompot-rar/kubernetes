@@ -17,3 +17,16 @@ spec:
       # Dzienna dostępność (do kalendarza/wykresu)
       - record: sla:availability:daily
         expr: avg_over_time(probe_success{job="blackbox", instance="https://devops.mrozy.org"}[1d])
+
+      # Czas odpowiedzi P95 z 30 dni (sekundy)
+      - record: sla:response_time:p95:30d
+        expr: quantile_over_time(0.95, probe_duration_seconds{job="blackbox", instance="https://devops.mrozy.org"}[30d])
+
+      # Średni dzienny czas odpowiedzi (sekundy)
+      - record: sla:response_time:avg:daily
+        expr: avg_over_time(probe_duration_seconds{job="blackbox", instance="https://devops.mrozy.org"}[1d])
+
+      # Suma minut downtimeu w ostatnich 30 dniach
+      # (Zakładamy probe co 30s, więc każdy sukces=0.5 minuty, porażka=0.5 minuty downtimeu)
+      - record: sla:downtime:minutes:30d
+        expr: sum_over_time((1 - probe_success{job="blackbox", instance="https://devops.mrozy.org"})[30d:1m])

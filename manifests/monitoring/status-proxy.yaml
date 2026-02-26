@@ -402,12 +402,17 @@ spec:
                 getRecentIncidents(),
                 Promise.all([
                   queryProm('sla:availability:30d'),
-                  queryPromRange('sla:availability:daily', thirtyDaysAgo, now, '1d')
+                  queryPromRange('sla:availability:daily', thirtyDaysAgo, now, '1d'),
+                  queryProm('sla:downtime:minutes:30d'),
+                  queryProm('sla:response_time:p95:30d'),
+                  queryPromRange('sla:response_time:avg:daily', thirtyDaysAgo, now, '1d'),
+                  // Streak: czas (w sek) od ostatniej porażki w oknie 30d
+                  queryProm('(time() - max_over_time(timestamp(probe_success{job="blackbox", instance="https://devops.mrozy.org"} == 0)[30d])) / 3600')
                 ])
               ]);
 
               const [temp, pods, ram, cpu, uptime, restarts24h, unhealthyPods, argoSync, chaosSectors, chaosErrors, chaosWear, chaosWriteLat, chaosInfo, chaosEvents, chaosReportedUncorrect, chaosSmartHealthy, chaosLifeRemain, chaosPowerHours, cpuPressure, memPressure, netRx, netTx] = promData;
-              const [uptime30d, dailyUptime] = slaData;
+              const [uptime30d, dailyUptime, downtime30d, p95_30d, dailyLatency, streakData] = slaData;
 
               const nodes = temp.map((t) => {
                 const instance = t.metric.instance;
@@ -465,6 +470,16 @@ spec:
                 statusMessage = `Self-healing active: ${unhealthyCount} pod(s) recovering.`;
               }
 
+              // Merge daily uptime and latency
+              const dailyMapped = (dailyUptime[0]?.values || []).map((v, i) => {
+                const latVal = dailyLatency[0]?.values?.[i]?.[1] || 0;
+                return {
+                  date: new Date(v[0] * 1000).toISOString().split('T')[0],
+                  uptime_pct: (parseFloat(v[1]) * 100).toFixed(2),
+                  avg_response_ms: (parseFloat(latVal) * 1000).toFixed(0)
+                };
+              });
+
               res.json({
                 cluster: {
                   totalPods: pods[0] ? pods[0].value[1] : "0",
@@ -483,11 +498,11 @@ spec:
                   }
                 },
                 sla: {
-                  uptime_30d: uptime30d[0] ? (parseFloat(uptime30d[0].value[1]) * 100).toFixed(4) : "0.0000",
-                  daily_history: dailyUptime[0] ? dailyUptime[0].values.map(v => ({
-                    timestamp: v[0],
-                    uptime: (parseFloat(v[1]) * 100).toFixed(2)
-                  })) : []
+                  uptime_30d_pct: uptime30d[0] ? parseFloat((parseFloat(uptime30d[0].value[1]) * 100).toFixed(2)) : 0,
+                  current_streak_hours: streakData[0] ? parseFloat(parseFloat(streakData[0].value[1]).toFixed(1)) : 720.0, // Default 30 dni jeśli brak awarii
+                  total_downtime_minutes_30d: downtime30d[0] ? parseFloat(parseFloat(downtime30d[0].value[1]).toFixed(1)) : 0,
+                  response_time_p95_ms: p95_30d[0] ? Math.round(parseFloat(p95_30d[0].value[1]) * 1000) : 0,
+                  daily: dailyMapped
                 },
                 incidents: incidents,
                 chaos_monkey_audit: {
