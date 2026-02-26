@@ -460,9 +460,9 @@ spec:
                       queryPromRange('sla:availability:daily', thirtyDaysAgo, now, '1d'),
                       queryProm('sla:downtime:minutes:30d'),
                       queryProm('sla:response_time:p95:30d'),
-                      queryPromRange(\'sla:response_time:avg:daily\', thirtyDaysAgo, now, \'1d\'),
+                      queryPromRange('sla:response_time:avg:daily', thirtyDaysAgo, now, '1d'),
                       // Honest Streak: Czas od ostatniej awarii LUB od pierwszej danej w bazie (max 30 dni)
-                      queryProm(\'(min(time() - last_over_time(timestamp(probe_success{instance="https://devops.mrozy.org"} == 0)[30d])) OR min(time() - min_over_time(timestamp(probe_success{instance="https://devops.mrozy.org"})[30d]))) / 3600\')
+                      queryProm('(min(time() - last_over_time(timestamp(probe_success{instance="https://devops.mrozy.org"} == 0)[30d])) OR min(time() - min_over_time(timestamp(probe_success{instance="https://devops.mrozy.org"})[30d]))) / 3600')
                     ]);
                   } catch (e) {
                     console.error("SLA Data Fetch Error:", e.message);
