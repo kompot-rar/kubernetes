@@ -234,8 +234,8 @@ spec:
               const successfulRuns = runs.filter(r => r.conclusion === 'success');
               const leadTimes = successfulRuns.map(r => {
                 const updatedAt = new Date(r.updated_at).getTime();
-                const committedAt = new Date(r.head_commit ? r.head_commit.timestamp : r.created_at).getTime();
-                return (updatedAt - committedAt) / (1000 * 60);
+                const createdAt = new Date(r.created_at).getTime();
+                return (updatedAt - createdAt) / (1000 * 60);
               });
               
               const lead_time_avg_minutes = leadTimes.length > 0 
