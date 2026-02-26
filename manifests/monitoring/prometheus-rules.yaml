@@ -4,7 +4,7 @@ metadata:
   name: sla-tracking
   namespace: monitoring
   labels:
-    release: monitoring-kube-prometheus
+    release: monitoring
 spec:
   groups:
   - name: sla_tracking

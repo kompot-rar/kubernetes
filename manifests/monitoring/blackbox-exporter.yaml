@@ -62,7 +62,7 @@ metadata:
   name: blog-probe
   namespace: monitoring
   labels:
-    release: monitoring-kube-prometheus
+    release: monitoring
 spec:
   jobName: blackbox
   prober:
