@@ -11,6 +11,15 @@ spec:
     targetRevision: 34.0.0
     helm:
       values: |
+        deployment:
+          replicas: 3
+        affinity:
+          podAntiAffinity:
+            requiredDuringSchedulingIgnoredDuringExecution:
+            - labelSelector:
+                matchLabels:
+                  app.kubernetes.io/name: traefik
+              topologyKey: "kubernetes.io/hostname"
         service:
           annotations:
             kube-vip.io/loadbalancerIPs: "10.0.20.20"
