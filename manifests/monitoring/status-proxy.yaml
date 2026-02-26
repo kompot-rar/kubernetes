@@ -544,11 +544,15 @@ spec:
                 statusMessage = `Self-healing active: ${unhealthyCount} pod(s) recovering.`;
               }
 
+              const totalDowntime = downtime30d[0] ? parseFloat(downtime30d[0].value[1]) : 0;
+              const thirtyDaysMinutes = 30 * 24 * 60;
+              const syntheticUptime = parseFloat(((1 - (totalDowntime / thirtyDaysMinutes)) * 100).toFixed(2));
+
               res.json({
-                // SLA Fields at Top Level (Default to 100% if no data)
-                uptime_30d_pct: uptime30d[0] ? parseFloat((parseFloat(uptime30d[0].value[1]) * 100).toFixed(2)) : 100.0,
+                // SLA Fields at Top Level (Synthetic calculation to avoid "new data" skew)
+                uptime_30d_pct: syntheticUptime,
                 current_streak_hours: currentStreak,
-                total_downtime_minutes_30d: downtime30d[0] ? parseFloat(parseFloat(downtime30d[0].value[1]).toFixed(1)) : 0,
+                total_downtime_minutes_30d: totalDowntime,
                 response_time_p95_ms: p95_30d[0] ? Math.round(parseFloat(p95_30d[0].value[1]) * 1000) : 0,
                 daily: dailyMapped,
 
