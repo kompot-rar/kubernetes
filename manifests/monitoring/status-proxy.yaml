@@ -208,6 +208,58 @@ spec:
             }
           };
 
+          const getDoraMetrics = async () => {
+            try {
+              if (!GITHUB_TOKEN) return null;
+              
+              const thirtyDaysAgo = new Date();
+              thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+              const createdAfter = thirtyDaysAgo.toISOString();
+
+              const runsRes = await githubClient.get(`/repos/${GITHUB_REPO}/actions/runs`, {
+                params: { 
+                  branch: "main", 
+                  status: "completed", 
+                  created: `>${createdAfter}`,
+                  per_page: 100 
+                }
+              });
+
+              const runs = runsRes.data.workflow_runs || [];
+              if (runs.length === 0) return null;
+
+              const deploys_30d = runs.length;
+              const deployment_frequency_per_week = parseFloat((deploys_30d / 4.3).toFixed(2));
+              
+              const successfulRuns = runs.filter(r => r.conclusion === 'success');
+              const leadTimes = successfulRuns.map(r => {
+                const updatedAt = new Date(r.updated_at).getTime();
+                const committedAt = new Date(r.head_commit ? r.head_commit.timestamp : r.created_at).getTime();
+                return (updatedAt - committedAt) / (1000 * 60);
+              });
+              
+              const lead_time_avg_minutes = leadTimes.length > 0 
+                ? parseFloat((leadTimes.reduce((a, b) => a + b, 0) / leadTimes.length).toFixed(1))
+                : 0;
+
+              const failed_deploys_30d = runs.filter(r => r.conclusion === 'failure').length;
+              const change_failure_rate_pct = deploys_30d > 0 
+                ? parseFloat(((failed_deploys_30d / deploys_30d) * 100).toFixed(1))
+                : 0;
+
+              return {
+                deployment_frequency_per_week,
+                lead_time_avg_minutes,
+                change_failure_rate_pct,
+                deploys_30d,
+                failed_deploys_30d
+              };
+            } catch (e) {
+              console.error("DORA Metrics Error:", e.message);
+              return null;
+            }
+          };
+
           const getCloudflareStats = async () => {
             if (!CF_API_TOKEN || !CF_ZONE_ID) return null;
             
@@ -366,7 +418,8 @@ spec:
                 k8sNodesRes,
                 k8sPodsRes,
                 incidents,
-                slaData
+                slaData,
+                doraData
               ] = await Promise.all([
                 Promise.all([
                   queryProm('max(node_hwmon_temp_celsius) by (instance)'),
@@ -415,7 +468,8 @@ spec:
                     console.error("SLA Data Fetch Error:", e.message);
                     return [[], [], [], [], [], []];
                   }
-                })()
+                })(),
+                getDoraMetrics()
               ]);
 
               const [temp, pods, ram, cpu, uptime, restarts24h, unhealthyPods, argoSync, chaosSectors, chaosErrors, chaosWear, chaosWriteLat, chaosInfo, chaosEvents, chaosReportedUncorrect, chaosSmartHealthy, chaosLifeRemain, chaosPowerHours, cpuPressure, memPressure, netRx, netTx] = promData;
@@ -535,6 +589,7 @@ spec:
                 nodes: nodes,
                 run: githubData.run,
                 jobs: githubData.jobs,
+                dora: doraData,
                 argocd_apps: argoApps,
                 topology: {
                   nodes: (k8sNodesRes.data && k8sNodesRes.data.items ? k8sNodesRes.data.items : []).map(n => {
