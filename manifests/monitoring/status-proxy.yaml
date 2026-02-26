@@ -400,19 +400,26 @@ spec:
                 k8sToken ? k8sClient.get('/api/v1/nodes').catch(() => ({ data: { items: [] } })) : Promise.resolve({ data: { items: [] } }),
                 k8sToken ? k8sClient.get('/api/v1/pods').catch(() => ({ data: { items: [] } })) : Promise.resolve({ data: { items: [] } }),
                 getRecentIncidents(),
-                Promise.all([
-                  queryProm('sla:availability:30d'),
-                  queryPromRange('sla:availability:daily', thirtyDaysAgo, now, '1d'),
-                  queryProm('sla:downtime:minutes:30d'),
-                  queryProm('sla:response_time:p95:30d'),
-                  queryPromRange('sla:response_time:avg:daily', thirtyDaysAgo, now, '1d'),
-                  // Streak: czas (w sek) od ostatniej porażki w oknie 30d
-                  queryProm('(time() - max_over_time(timestamp(probe_success{job="blackbox", instance="https://devops.mrozy.org"} == 0)[30d])) / 3600')
-                ])
+                (async () => {
+                  try {
+                    return await Promise.all([
+                      queryProm('sla:availability:30d'),
+                      queryPromRange('sla:availability:daily', thirtyDaysAgo, now, '1d'),
+                      queryProm('sla:downtime:minutes:30d'),
+                      queryProm('sla:response_time:p95:30d'),
+                      queryPromRange('sla:response_time:avg:daily', thirtyDaysAgo, now, '1d'),
+                      // Uproszczony streak: jeśli nie było awarii, zwróć 720h (30 dni)
+                      queryProm('min(time() - timestamp(probe_success{job="blackbox", instance="https://devops.mrozy.org"} == 0) / 3600) OR on() vector(720)')
+                    ]);
+                  } catch (e) {
+                    console.error("SLA Data Fetch Error:", e.message);
+                    return [[], [], [], [], [], []];
+                  }
+                })()
               ]);
 
               const [temp, pods, ram, cpu, uptime, restarts24h, unhealthyPods, argoSync, chaosSectors, chaosErrors, chaosWear, chaosWriteLat, chaosInfo, chaosEvents, chaosReportedUncorrect, chaosSmartHealthy, chaosLifeRemain, chaosPowerHours, cpuPressure, memPressure, netRx, netTx] = promData;
-              const [uptime30d, dailyUptime, downtime30d, p95_30d, dailyLatency, streakData] = slaData;
+              const [uptime30d, dailyUptime, downtime30d, p95_30d, dailyLatency, streakData] = (slaData || [[], [], [], [], [], []]);
 
               const nodes = temp.map((t) => {
                 const instance = t.metric.instance;
@@ -426,6 +433,16 @@ spec:
                   cpu: cpuVal ? parseFloat(cpuVal.value[1]).toFixed(1) : "0",
                   ram: ramVal ? parseFloat(ramVal.value[1]).toFixed(1) : "0",
                   uptime: upVal ? (parseFloat(upVal.value[1]) / 86400).toFixed(1) : "0"
+                };
+              });
+
+              // Merge daily uptime and latency
+              const dailyMapped = (dailyUptime && dailyUptime[0] && dailyUptime[0].values || []).map((v, i) => {
+                const latVal = dailyLatency && dailyLatency[0] && dailyLatency[0].values && dailyLatency[0].values[i] ? dailyLatency[0].values[i][1] : 0;
+                return {
+                  date: new Date(v[0] * 1000).toISOString().split('T')[0],
+                  uptime_pct: (parseFloat(v[1]) * 100).toFixed(2),
+                  avg_response_ms: (parseFloat(latVal) * 1000).toFixed(0)
                 };
               });
 
