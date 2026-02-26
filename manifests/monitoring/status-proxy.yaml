@@ -115,6 +115,20 @@ spec:
             }
           };
 
+          const queryPromRange = async (q, start, end, step) => {
+            try {
+              const rangeUrl = PROM_URL.replace('/query', '/query_range');
+              const res = await axios.get(rangeUrl, { 
+                params: { query: q, start, end, step }, 
+                timeout: 5000 
+              });
+              return res.data.data.result;
+            } catch (e) {
+              console.error(`Query Range Error (${q}):`, e.message);
+              return [];
+            }
+          };
+
           const getArgoApps = async () => {
             try {
               if (!ARGOCD_TOKEN) return [];
@@ -341,6 +355,9 @@ spec:
 
           app.get('/api/status', async (req, res) => {
             try {
+              const now = Math.floor(Date.now() / 1000);
+              const thirtyDaysAgo = now - (30 * 24 * 60 * 60);
+
               const [
                 promData,
                 githubData,
@@ -348,7 +365,8 @@ spec:
                 cloudflareData,
                 k8sNodesRes,
                 k8sPodsRes,
-                incidents
+                incidents,
+                slaData
               ] = await Promise.all([
                 Promise.all([
                   queryProm('max(node_hwmon_temp_celsius) by (instance)'),
@@ -381,10 +399,15 @@ spec:
                 getCloudflareStats(),
                 k8sToken ? k8sClient.get('/api/v1/nodes').catch(() => ({ data: { items: [] } })) : Promise.resolve({ data: { items: [] } }),
                 k8sToken ? k8sClient.get('/api/v1/pods').catch(() => ({ data: { items: [] } })) : Promise.resolve({ data: { items: [] } }),
-                getRecentIncidents()
+                getRecentIncidents(),
+                Promise.all([
+                  queryProm('sla:availability:30d'),
+                  queryPromRange('sla:availability:daily', thirtyDaysAgo, now, '1d')
+                ])
               ]);
 
               const [temp, pods, ram, cpu, uptime, restarts24h, unhealthyPods, argoSync, chaosSectors, chaosErrors, chaosWear, chaosWriteLat, chaosInfo, chaosEvents, chaosReportedUncorrect, chaosSmartHealthy, chaosLifeRemain, chaosPowerHours, cpuPressure, memPressure, netRx, netTx] = promData;
+              const [uptime30d, dailyUptime] = slaData;
 
               const nodes = temp.map((t) => {
                 const instance = t.metric.instance;
@@ -458,6 +481,13 @@ spec:
                     network_rx_mbps: netRx[0] ? (parseFloat(netRx[0].value[1]) / 1024 / 1024 * 8).toFixed(2) : "0",
                     network_tx_mbps: netTx[0] ? (parseFloat(netTx[0].value[1]) / 1024 / 1024 * 8).toFixed(2) : "0"
                   }
+                },
+                sla: {
+                  uptime_30d: uptime30d[0] ? (parseFloat(uptime30d[0].value[1]) * 100).toFixed(4) : "0.0000",
+                  daily_history: dailyUptime[0] ? dailyUptime[0].values.map(v => ({
+                    timestamp: v[0],
+                    uptime: (parseFloat(v[1]) * 100).toFixed(2)
+                  })) : []
                 },
                 incidents: incidents,
                 chaos_monkey_audit: {
