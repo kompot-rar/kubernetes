@@ -13,15 +13,19 @@ spec:
       values: |
         deployment:
           replicas: 3
+          rollingUpdate:
+            maxSurge: 0
+            maxUnavailable: 1
         affinity:
           podAntiAffinity:
-            preferredDuringSchedulingIgnoredDuringExecution:
-            - weight: 100
-              podAffinityTerm:
-                labelSelector:
-                  matchLabels:
-                    app.kubernetes.io/name: traefik
-                topologyKey: "kubernetes.io/hostname"
+            requiredDuringSchedulingIgnoredDuringExecution:
+            - labelSelector:
+                matchExpressions:
+                - key: app.kubernetes.io/name
+                  operator: In
+                  values:
+                  - traefik
+              topologyKey: "kubernetes.io/hostname"
         service:
           annotations:
             kube-vip.io/loadbalancerIPs: "10.0.20.20"

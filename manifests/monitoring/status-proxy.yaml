@@ -475,7 +475,7 @@ spec:
               const [temp, pods, ram, cpu, uptime, restarts24h, unhealthyPods, argoSync, chaosSectors, chaosErrors, chaosWear, chaosWriteLat, chaosInfo, chaosEvents, chaosReportedUncorrect, chaosSmartHealthy, chaosLifeRemain, chaosPowerHours, cpuPressure, memPressure, netRx, netTx] = promData;
               const [uptime30d, dailyUptime, downtime30d, p95_30d, dailyLatency, streakData] = (slaData || [[], [], [], [], [], []]);
               
-              const currentStreak = streakData[0] ? parseFloat(parseFloat(streakData[0].value[1]).toFixed(1)) : 0.0;
+              const currentStreak = streakData[0] ? parseFloat(streakData[0].value[1]) : 0.0;
 
               const nodes = temp.map((t) => {
                 const instance = t.metric.instance;
