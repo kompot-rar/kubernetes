@@ -634,8 +634,8 @@ spec:
 
           // Initial cache update
           updateCache();
-          // Update cache every 60 seconds
-          setInterval(updateCache, 60000);
+          // Update cache every 30 seconds
+          setInterval(updateCache, 30000);
 
           app.get('/api/status', async (req, res) => {
             if (!cachedData.data) {
