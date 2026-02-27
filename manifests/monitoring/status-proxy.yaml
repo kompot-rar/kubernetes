@@ -82,7 +82,7 @@ spec:
           const PROM_URL = "http://monitoring-kube-prometheus-prometheus.monitoring.svc:9090/api/v1/query";
           const GITHUB_REPO = "kompot-rar/Vibe_devops";
           const GITHUB_TOKEN = process.env.GITHUB_TOKEN;
-          const ARGOCD_URL = "http://argocd-server.argocd.svc"; // Use internal port 80
+          const ARGOCD_URL = "https://argocd-server.argocd.svc"; // Back to HTTPS
           const ARGOCD_TOKEN = process.env.ARGOCD_TOKEN;
           
           // Cloudflare config
@@ -99,6 +99,9 @@ spec:
 
           const argoClient = axios.create({
             baseURL: ARGOCD_URL,
+            httpsAgent: new https.Agent({  
+              rejectUnauthorized: false // Ignore self-signed certs internal to cluster
+            }),
             headers: {
               ...(ARGOCD_TOKEN && { "Authorization": `Bearer ${ARGOCD_TOKEN}` })
             }
