@@ -34,7 +34,7 @@ spec:
               mountPath: /mnt/config
       containers:
         - name: blog
-          image: 10.0.20.50:5000/blog-devops:cde06ac
+          image: 10.0.20.50:5000/blog-devops:c3b23d0
           imagePullPolicy: Always
           env:
             - name: NODE_NAME
