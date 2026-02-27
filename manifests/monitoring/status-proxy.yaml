@@ -67,6 +67,8 @@ spec:
           const app = express();
           app.use(cors());
 
+          let cachedData = { last_update: null, data: null };
+
           // Kubernetes internal client
           const K8S_URL = "https://kubernetes.default.svc";
           let k8sToken = "";
@@ -80,7 +82,7 @@ spec:
           const PROM_URL = "http://monitoring-kube-prometheus-prometheus.monitoring.svc:9090/api/v1/query";
           const GITHUB_REPO = "kompot-rar/Vibe_devops";
           const GITHUB_TOKEN = process.env.GITHUB_TOKEN;
-          const ARGOCD_URL = "https://argocd-server.argocd.svc"; // Internal Cluster URL
+          const ARGOCD_URL = "http://argocd-server.argocd.svc"; // Use internal port 80
           const ARGOCD_TOKEN = process.env.ARGOCD_TOKEN;
           
           // Cloudflare config
@@ -97,9 +99,6 @@ spec:
 
           const argoClient = axios.create({
             baseURL: ARGOCD_URL,
-            httpsAgent: new https.Agent({  
-              rejectUnauthorized: false // Ignore self-signed certs internal to cluster
-            }),
             headers: {
               ...(ARGOCD_TOKEN && { "Authorization": `Bearer ${ARGOCD_TOKEN}` })
             }
@@ -216,22 +215,29 @@ spec:
               thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
               const createdAfter = thirtyDaysAgo.toISOString();
 
-              const runsRes = await githubClient.get(`/repos/${GITHUB_REPO}/actions/runs`, {
-                params: { 
-                  branch: "main", 
-                  status: "completed", 
-                  created: `>${createdAfter}`,
-                  per_page: 100 
-                }
-              });
+              // Fetch up to 5 pages of workflow runs (500 runs max)
+              let allRuns = [];
+              for (let page = 1; page <= 5; page++) {
+                const res = await githubClient.get(`/repos/${GITHUB_REPO}/actions/runs`, {
+                  params: { 
+                    branch: "main", 
+                    status: "completed", 
+                    created: `>${createdAfter}`,
+                    per_page: 100,
+                    page: page
+                  }
+                });
+                const runs = res.data.workflow_runs || [];
+                allRuns = allRuns.concat(runs);
+                if (runs.length < 100) break;
+              }
 
-              const runs = runsRes.data.workflow_runs || [];
-              if (runs.length === 0) return null;
+              if (allRuns.length === 0) return null;
 
-              const deploys_30d = runs.length;
+              const deploys_30d = allRuns.length;
               const deployment_frequency_per_week = parseFloat((deploys_30d / 4.3).toFixed(2));
               
-              const successfulRuns = runs.filter(r => r.conclusion === 'success');
+              const successfulRuns = allRuns.filter(r => r.conclusion === 'success');
               const leadTimes = successfulRuns.map(r => {
                 const updatedAt = new Date(r.updated_at).getTime();
                 const createdAt = new Date(r.created_at).getTime();
@@ -242,7 +248,7 @@ spec:
                 ? parseFloat((leadTimes.reduce((a, b) => a + b, 0) / leadTimes.length).toFixed(1))
                 : 0;
 
-              const failed_deploys_30d = runs.filter(r => r.conclusion === 'failure').length;
+              const failed_deploys_30d = allRuns.filter(r => r.conclusion === 'failure').length;
               const change_failure_rate_pct = deploys_30d > 0 
                 ? parseFloat(((failed_deploys_30d / deploys_30d) * 100).toFixed(1))
                 : 0;
@@ -405,7 +411,7 @@ spec:
             }
           };
 
-          app.get('/api/status', async (req, res) => {
+          const updateCache = async () => {
             try {
               const now = Math.floor(Date.now() / 1000);
               const thirtyDaysAgo = now - (30 * 24 * 60 * 60);
@@ -471,6 +477,172 @@ spec:
                 })(),
                 getDoraMetrics()
               ]);
+
+              const [temp, pods, ram, cpu, uptime, restarts24h, unhealthyPods, argoSync, chaosSectors, chaosErrors, chaosWear, chaosWriteLat, chaosInfo, chaosEvents, chaosReportedUncorrect, chaosSmartHealthy, chaosLifeRemain, chaosPowerHours, cpuPressure, memPressure, netRx, netTx] = promData;
+              const [uptime30d, dailyUptime, downtime30d, p95_30d, dailyLatency, streakData] = (slaData || [[], [], [], [], [], []]);
+              
+              const currentStreak = streakData[0] ? parseFloat(streakData[0].value[1]) : 0.0;
+
+              const nodes = temp.map((t) => {
+                const instance = t.metric.instance;
+                const cpuVal = cpu.find(c => c.metric.instance === instance);
+                const ramVal = ram.find(r => r.metric.instance === instance);
+                const upVal = uptime.find(u => u.metric.instance === instance);
+                
+                return {
+                  name: instance.split(':')[0],
+                  temp: t.value ? parseFloat(t.value[1]).toFixed(1) : "0",
+                  cpu: cpuVal ? parseFloat(cpuVal.value[1]).toFixed(1) : "0",
+                  ram: ramVal ? parseFloat(ramVal.value[1]).toFixed(1) : "0",
+                  uptime: upVal ? (parseFloat(upVal.value[1]) / 86400).toFixed(1) : "0"
+                };
+              });
+
+              // Merge daily uptime and latency
+              const dailyMapped = (dailyUptime && dailyUptime[0] && dailyUptime[0].values || []).map((v, i) => {
+                const latVal = dailyLatency && dailyLatency[0] && dailyLatency[0].values && dailyLatency[0].values[i] ? dailyLatency[0].values[i][1] : 0;
+                const uptimeVal = v[1] ? parseFloat((parseFloat(v[1]) * 100).toFixed(2)) : 100.0;
+                return {
+                  date: new Date(v[0] * 1000).toISOString().split('T')[0],
+                  uptime_pct: uptimeVal,
+                  avg_response_ms: parseInt((parseFloat(latVal) * 1000).toFixed(0))
+                };
+              });
+
+              // Chaos Monkey Logic
+              const sectors = chaosSectors[0] ? parseInt(chaosSectors[0].value[1]) : 0;
+              const errors = chaosErrors[0] ? parseInt(chaosErrors[0].value[1]) : 0;
+              const wear = chaosWear[0] ? parseInt(chaosWear[0].value[1]) : 0;
+              const writeLat = chaosWriteLat[0] ? parseFloat(chaosWriteLat[0].value[1]) : 0;
+              const info = chaosInfo[0] ? chaosInfo[0].metric : {};
+              const events = chaosEvents[0] ? parseInt(chaosEvents[0].value[1]) : 0;
+              const reportedUncorrect = chaosReportedUncorrect[0] ? parseInt(chaosReportedUncorrect[0].value[1]) : 0;
+              const isSmartHealthy = chaosSmartHealthy[0] ? parseInt(chaosSmartHealthy[0].value[1]) === 1 : false;
+              const lifeRemain = chaosLifeRemain[0] ? parseInt(chaosLifeRemain[0].value[1]) : 100;
+              const powerHours = chaosPowerHours[0] ? parseInt(chaosPowerHours[0].value[1]) : 0;
+
+              let chaosStatus = "Stable (For a dumpster disk)";
+              let chaosNote = "Running on salvaged hardware. No data is safe here.";
+              
+              if (reportedUncorrect > 1000) {
+                chaosStatus = "Radioactive (ECC Failure)";
+                chaosNote = "Massive hardware ECC errors. Bit-rot is actively occurring.";
+              } else if (lifeRemain < 10) {
+                chaosStatus = "EOL (End of Life)";
+                chaosNote = "NAND cells exhausted. Write operations are high-risk.";
+              } else if (errors > 0) {
+                chaosStatus = "Dying (Data Loss Detected)";
+                chaosNote = "Uncorrectable sectors found. SMART self-test is screaming.";
+              } else if (writeLat > 0.5) {
+                chaosStatus = "Throttling (Floppy Disk Mode)";
+                chaosNote = "High write latency detected. Controller struggling with bad cells.";
+              }
+
+              const restartCount = restarts24h[0] ? Math.round(parseFloat(restarts24h[0].value[1])) : 0;
+              const unhealthyCount = unhealthyPods[0] ? parseInt(unhealthyPods[0].value[1]) : 0;
+              const isSynced = argoSync[0] ? parseInt(argoSync[0].value[1]) > 0 : false;
+              
+              let clusterStatus = "Healthy";
+              let statusMessage = isSynced ? "GitOps Synced. All systems operational." : "Cluster Operational. Manual changes detected.";
+              
+              if (unhealthyCount > 0) {
+                clusterStatus = "Warning";
+                statusMessage = `Self-healing active: ${unhealthyCount} pod(s) recovering.`;
+              }
+
+              const totalDowntime = downtime30d[0] ? parseFloat(downtime30d[0].value[1]) : 0;
+              const thirtyDaysMinutes = 30 * 24 * 60;
+              const syntheticUptime = parseFloat(((1 - (totalDowntime / thirtyDaysMinutes)) * 100).toFixed(2));
+
+              cachedData = {
+                last_update: new Date().toISOString(),
+                data: {
+                  uptime_30d_pct: syntheticUptime,
+                  current_streak_hours: currentStreak,
+                  total_downtime_minutes_30d: totalDowntime,
+                  response_time_p95_ms: p95_30d[0] ? Math.round(parseFloat(p95_30d[0].value[1]) * 1000) : 0,
+                  daily: dailyMapped,
+
+                  cluster: {
+                    totalPods: pods[0] ? pods[0].value[1] : "0",
+                    status: clusterStatus,
+                    message: statusMessage,
+                    gitops: isSynced ? "Synced" : "Out of Sync",
+                    lastUpdate: new Date().toISOString(),
+                    restarts_24h: restartCount,
+                    unhealthy_pods: unhealthyCount,
+                    incidents: incidents,
+                    stats: {
+                      cpu_pressure: cpuPressure[0] ? parseFloat(cpuPressure[0].value[1]).toFixed(1) : "0",
+                      memory_pressure: memPressure[0] ? parseFloat(memPressure[0].value[1]).toFixed(1) : "0",
+                      network_rx_mbps: netRx[0] ? (parseFloat(netRx[0].value[1]) / 1024 / 1024 * 8).toFixed(2) : "0",
+                      network_tx_mbps: netTx[0] ? (parseFloat(netTx[0].value[1]) / 1024 / 1024 * 8).toFixed(2) : "0"
+                    }
+                  },
+                  incidents: incidents,
+                  chaos_monkey_audit: {
+                    target: info.device_model || "Crucial_MX300 (Dumpster)",
+                    serial: info.serial_number || "N/A",
+                    node: "10.0.10.13",
+                    health_status: chaosStatus,
+                    firmware_verdict: isSmartHealthy ? "PASSED (Optimistic)" : "FAILED (Critical)",
+                    alert_level: reportedUncorrect > 0 ? "Radioactive" : (lifeRemain < 30 ? "Critical" : (errors > 0 ? "Critical" : (sectors > 0 || events > 0 ? "Warning" : "Nominal"))),
+                    metrics: {
+                      reallocated_sectors: sectors,
+                      reallocated_events: events,
+                      offline_uncorrectable: errors,
+                      reported_uncorrectable_ecc: reportedUncorrect,
+                      ssd_wear_cycles: wear,
+                      lifetime_remain_pct: lifeRemain,
+                      power_on_hours: powerHours,
+                      avg_write_lat_sec: writeLat.toFixed(4)
+                    },
+                    sre_message: chaosNote
+                  },
+                  cloudflare: cloudflareData || { message: "Cloudflare integration not configured or data unavailable." },
+                  nodes: nodes,
+                  run: githubData.run,
+                  jobs: githubData.jobs,
+                  dora: doraData,
+                  argocd_apps: argoApps,
+                  topology: {
+                    nodes: (k8sNodesRes.data && k8sNodesRes.data.items ? k8sNodesRes.data.items : []).map(n => {
+                      const nodeName = n.metadata.name;
+                      return {
+                        name: nodeName,
+                        status: n.status && n.status.conditions ? (n.status.conditions.find(c => c.type === 'Ready') || {}).status || 'Unknown' : 'Unknown',
+                        pods: (k8sPodsRes.data && k8sPodsRes.data.items ? k8sPodsRes.data.items : [])
+                          .filter(p => p.spec.nodeName === nodeName)
+                          .map(p => ({
+                            name: p.metadata.name,
+                            namespace: p.metadata.namespace,
+                            status: p.status ? p.status.phase : 'Unknown'
+                          }))
+                      };
+                    }),
+                    whoami: {
+                      pod: process.env.POD_NAME || 'status-proxy',
+                      node: process.env.NODE_NAME || 'unknown'
+                    }
+                  }
+                }
+              };
+            } catch (e) {
+              console.error("Cache Update Error:", e.message);
+            }
+          };
+
+          // Initial cache update
+          updateCache();
+          // Update cache every 60 seconds
+          setInterval(updateCache, 60000);
+
+          app.get('/api/status', async (req, res) => {
+            if (!cachedData.data) {
+              return res.status(503).json({ error: "Cache warming up, please wait..." });
+            }
+            res.json(cachedData.data);
+          });
 
               const [temp, pods, ram, cpu, uptime, restarts24h, unhealthyPods, argoSync, chaosSectors, chaosErrors, chaosWear, chaosWriteLat, chaosInfo, chaosEvents, chaosReportedUncorrect, chaosSmartHealthy, chaosLifeRemain, chaosPowerHours, cpuPressure, memPressure, netRx, netTx] = promData;
               const [uptime30d, dailyUptime, downtime30d, p95_30d, dailyLatency, streakData] = (slaData || [[], [], [], [], [], []]);
