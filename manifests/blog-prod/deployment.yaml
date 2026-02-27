@@ -22,6 +22,7 @@ spec:
         app: blog-devops
         env: prod
     spec:
+      terminationGracePeriodSeconds: 10
       affinity:
         podAntiAffinity:
           requiredDuringSchedulingIgnoredDuringExecution:
