@@ -8,6 +8,8 @@ spec:
   template:
     spec:
       restartPolicy: Never
+      imagePullSecrets:
+        - name: ghcr-secret
       containers:
         - name: migrate
           image: ghcr.io/kompot-rar/fishky-backend:latest
