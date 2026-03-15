@@ -13,7 +13,7 @@ spec:
       containers:
         - name: migrate
           image: ghcr.io/kompot-rar/fishky-backend:latest
-          command: ["alembic", "upgrade", "head"]
+          command: ["sh", "-c", "cd /home/fishky/app && python -m alembic upgrade head"]
           env:
             - name: DATABASE_URL
               valueFrom:
