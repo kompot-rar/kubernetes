@@ -1,0 +1,14 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: fishky
+
+resources:
+  - namespace.yaml
+  - redis.yaml
+  - backend.yaml
+  - worker.yaml
+  - ingress.yaml
+  # Secret NIE jest tutaj — zarządzany ręcznie (kubectl apply) poza ArgoCD.
+  # Nie commituj prawdziwych haseł do gita.
+  # Alternatywa: SealedSecrets lub External Secrets Operator.
