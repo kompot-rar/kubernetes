@@ -1,0 +1,59 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: forgejo
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://code.forgejo.org/forgejo-helm
+    chart: forgejo
+    targetRevision: 1.2.x # Używamy stabilnej gałęzi 1.2.x
+    helm:
+      values: |
+        ingress:
+          enabled: true
+          # Traefik w k3s standardowo używa klasy traefik
+          className: traefik
+          hosts:
+            - host: git.kuznia.local
+              paths:
+                - path: /
+                  pathType: Prefix
+        
+        gitea:
+          config:
+            server:
+              DOMAIN: "git.kuznia.local"
+              ROOT_URL: "http://git.kuznia.local/"
+              # Wyłączamy wbudowany serwer SSH, skupiamy się na HTTP/HTTPS
+              DISABLE_SSH: true
+            repository:
+              # Aktywujemy migracje/mirroring
+              ENABLE_MIGRATION: true
+        
+        # Wyłączamy memcached i postgresql dla minimalnego zużycia zasobów (użyje wbudowanego SQLite, idealnego do laba)
+        postgresql:
+          enabled: false
+        postgresql-ha:
+          enabled: false
+        memcached:
+          enabled: false
+        redis-cluster:
+          enabled: false
+
+        # Konfiguracja dysku dla SQLite i repozytoriów
+        persistence:
+          enabled: true
+          size: 5Gi
+
+  destination:
+    server: https://kubernetes.default.svc
+    # Instalujemy Forgejo w osobnym namespace
+    namespace: forgejo
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
