@@ -6,9 +6,9 @@ metadata:
 spec:
   project: default
   source:
-    repoURL: https://code.forgejo.org/forgejo-helm
+    repoURL: code.forgejo.org/forgejo-helm
     chart: forgejo
-    targetRevision: 1.2.x # Używamy stabilnej gałęzi 1.2.x
+    targetRevision: 16.2.1
     helm:
       values: |
         ingress:
