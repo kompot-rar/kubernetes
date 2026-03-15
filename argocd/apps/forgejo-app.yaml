@@ -16,7 +16,7 @@ spec:
           # Traefik w k3s standardowo używa klasy traefik
           className: traefik
           hosts:
-            - host: git.kuznia.local
+            - host: git.kuznia.k3s
               paths:
                 - path: /
                   pathType: Prefix
@@ -24,8 +24,8 @@ spec:
         gitea:
           config:
             server:
-              DOMAIN: "git.kuznia.local"
-              ROOT_URL: "http://git.kuznia.local/"
+              DOMAIN: "git.kuznia.k3s"
+              ROOT_URL: "http://git.kuznia.k3s/"
               # Wyłączamy wbudowany serwer SSH, skupiamy się na HTTP/HTTPS
               DISABLE_SSH: true
             repository:
