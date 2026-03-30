@@ -24,7 +24,7 @@ spec:
         prometheus:
           prometheusSpec:
             retention: 31d
-            retentionSize: 12GB
+            retentionSize: 20GB
             serviceMonitorSelectorNilUsesHelmValues: false
             probeSelectorNilUsesHelmValues: false
 
