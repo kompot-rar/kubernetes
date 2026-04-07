@@ -8,15 +8,19 @@ metadata:
 spec:
   groups:
   - name: sla_tracking
-    interval: 5m
+    interval: 1m
     rules:
-      # Średnia dostępność z ostatnich 30 dni (wartość 0-1)
-      - record: sla:availability:30d
-        expr: avg_over_time(probe_success{job="blackbox", instance="https://devops.mrozy.org"}[30d])
-      
-      # Dzienna dostępność (do kalendarza/wykresu)
+      # POMOCNICZA: Filtruje mrugnięcia sieci (wymaga minimum 2 błędów z rzędu aby raportować 0)
+      - record: sla:probe_success_filtered
+        expr: max_over_time(probe_success{job="blackbox", instance="https://devops.mrozy.org"}[1m])
+
+      # DZIENNE SLA: Liczone z odszumionych danych (zapisuje jeden punkt na dzień w bazie)
       - record: sla:availability:daily
-        expr: avg_over_time(probe_success{job="blackbox", instance="https://devops.mrozy.org"}[1d])
+        expr: avg_over_time(sla:probe_success_filtered[1d])
+
+      # 30-DNIOWE SLA: Liczone z odszumionych DZIENNYCH statystyk (lekkie i odporne na retencję logów)
+      - record: sla:availability:30d
+        expr: avg_over_time(sla:availability:daily[30d])
 
       # Czas odpowiedzi P95 z 30 dni (sekundy)
       - record: sla:response_time:p95:30d
@@ -26,7 +30,6 @@ spec:
       - record: sla:response_time:avg:daily
         expr: avg_over_time(probe_duration_seconds{job="blackbox", instance="https://devops.mrozy.org"}[1d])
 
-      # Suma minut downtimeu w ostatnich 30 dniach
-      # (Zakładamy probe co 30s, więc każdy sukces=0.5 minuty, porażka=0.5 minuty downtimeu)
+      # Suma minut realnego downtimeu w ostatnich 30 dniach (błędy trwające > 1 min)
       - record: sla:downtime:minutes:30d
-        expr: sum_over_time((1 - probe_success{job="blackbox", instance="https://devops.mrozy.org"})[30d:1m])
+        expr: sum_over_time((1 - sla:probe_success_filtered)[30d:1m])
