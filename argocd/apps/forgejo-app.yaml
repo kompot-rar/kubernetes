@@ -45,8 +45,8 @@ spec:
         # Konfiguracja dysku dla SQLite i repozytoriów
         persistence:
           enabled: true
-          size: 5Gi
-
+          storageClass: "nfs-client"
+          size: 20Gi
   destination:
     server: https://kubernetes.default.svc
     # Instalujemy Forgejo w osobnym namespace
