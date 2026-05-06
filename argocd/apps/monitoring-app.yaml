@@ -54,7 +54,7 @@ spec:
                     requests:
                       storage: 40Gi
             
-            extraArgs:
+            additionalArgs:
               - name: storage.tsdb.no-lockfile
                 value: ""
               - name: query.active-tracker-dir
