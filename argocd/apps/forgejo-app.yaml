@@ -43,9 +43,10 @@ spec:
           enabled: false
 
         # Konfiguracja dysku dla SQLite i repozytoriów
+        replicaCount: 1
         persistence:
           enabled: true
-          storageClass: "nfs-client"
+          storageClass: "nfs-client-ssd"
           size: 20Gi
   destination:
     server: https://kubernetes.default.svc
