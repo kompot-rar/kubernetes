@@ -48,10 +48,11 @@ spec:
             storageSpec:
               volumeClaimTemplate:
                 spec:
+                  storageClassName: nfs-client-ssd
                   accessModes: ["ReadWriteOnce"]
                   resources:
                     requests:
-                      storage: 10Gi
+                      storage: 40Gi
             
         prometheusOperator:
           admissionWebhooks:
