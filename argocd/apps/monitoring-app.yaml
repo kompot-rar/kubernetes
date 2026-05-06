@@ -54,20 +54,6 @@ spec:
                     requests:
                       storage: 40Gi
             
-            additionalArgs:
-              - name: storage.tsdb.no-lockfile
-                value: ""
-              - name: query.active-tracker-dir
-                value: /tmp/prometheus-queries
-            
-            volumes:
-              - name: queries-tmp
-                emptyDir: {}
-            
-            volumeMounts:
-              - name: queries-tmp
-                mountPath: /tmp/prometheus-queries
-            
         prometheusOperator:
           admissionWebhooks:
             enabled: false
