@@ -54,6 +54,10 @@ spec:
                     requests:
                       storage: 40Gi
             
+            extraArgs:
+              - name: storage.tsdb.no-lockfile
+                value: ""
+            
         prometheusOperator:
           admissionWebhooks:
             enabled: false
