@@ -17,6 +17,9 @@ The goal of this project is to build a highly available, production-ready Kubern
     *   **ArgoCD Bootstrap**: Initializing GitOps for continuous delivery.
 *   **`apps/`**: Kubernetes manifests and application configurations managed via GitOps:
     *   **Blog (Dev/Prod)**: Multi-environment deployment of the project's blog.
+    *   **Fishky**: Android flashcard app used to practice multi-container orchestration (Backend, Redis, Workers).
+    *   **Forgejo**: Private Git server for learning Helm automation and stateful app persistence.
+    *   **NFS Provisioner**: NAS-to-cluster bridge used to learn StorageClasses and PV lifecycles.
     *   **Traefik**: Ingress Controller for routing external traffic.
     *   **Cloudflared**: Secure tunnel for external access.
     *   **Prometheus Stack**: Full observability solution collecting metrics from K3s nodes and Proxmox hosts.
