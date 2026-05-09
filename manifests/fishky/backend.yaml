@@ -41,6 +41,36 @@ spec:
                 secretKeyRef:
                   name: fishky-secrets
                   key: GEMINI_API_KEY
+            # --- Google Play Billing ---
+            # Path to the service-account JSON mounted from `fishky-play-sa` secret.
+            # The file itself is delivered by the volumeMount below — this env var
+            # just tells play_billing_service._get_service() where to find it.
+            - name: GOOGLE_PLAY_SERVICE_ACCOUNT_FILE
+              value: "/secrets/play-sa.json"
+            # Package name = Android applicationId from frontend/android/app/build.gradle
+            # (NOT the Kotlin namespace "com.fishky.fishky" — that's unrelated).
+            - name: GOOGLE_PLAY_PACKAGE_NAME
+              value: "fishky.mrozy"
+            # Must equal the full URL configured as the Pub/Sub push endpoint.
+            # Google signs every RTDN push JWT with this string as audience;
+            # mismatch = 401 in _verify_rtdn_request.
+            - name: RTDN_PUSH_AUDIENCE
+              value: "https://apifishky.mrozy.org/api/billing/rtdn"
+            # Email of the service account that Pub/Sub uses to sign push JWTs.
+            # Stored in secret (not value:) so rotation doesn't require a repo edit.
+            - name: RTDN_PUSH_SERVICE_ACCOUNT
+              valueFrom:
+                secretKeyRef:
+                  name: fishky-secrets
+                  key: RTDN_PUSH_SERVICE_ACCOUNT
+            # MUST be "false" in production — startup check in app/main.py will
+            # RuntimeError if any of the three vars above are empty while this is false.
+            - name: DISABLE_PLAY_VERIFICATION
+              value: "false"
+          volumeMounts:
+            - name: play-sa
+              mountPath: /secrets
+              readOnly: true
           resources:
             requests:
               cpu: 100m
@@ -60,6 +90,14 @@ spec:
               port: 8000
             initialDelaySeconds: 5
             periodSeconds: 10
+      volumes:
+        # Mounted at /secrets/play-sa.json inside the container.
+        # Secret must be created out-of-band (NOT in ArgoCD):
+        #   kubectl create secret generic fishky-play-sa -n fishky \
+        #     --from-file=play-sa.json=./fishky-play-sa.json
+        - name: play-sa
+          secret:
+            secretName: fishky-play-sa
 ---
 apiVersion: v1
 kind: Service

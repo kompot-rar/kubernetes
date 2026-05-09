@@ -40,6 +40,27 @@ spec:
                 secretKeyRef:
                   name: fishky-secrets
                   key: GEMINI_API_KEY
+            # Play Billing — parity with backend.yaml.  Worker is `replicas: 0`
+            # today (legacy RQ flow unused) but we include these so any future
+            # revival doesn't require a second K8s PR.  See backend.yaml for
+            # rationale on each variable.
+            - name: GOOGLE_PLAY_SERVICE_ACCOUNT_FILE
+              value: "/secrets/play-sa.json"
+            - name: GOOGLE_PLAY_PACKAGE_NAME
+              value: "fishky.mrozy"
+            - name: RTDN_PUSH_AUDIENCE
+              value: "https://apifishky.mrozy.org/api/billing/rtdn"
+            - name: RTDN_PUSH_SERVICE_ACCOUNT
+              valueFrom:
+                secretKeyRef:
+                  name: fishky-secrets
+                  key: RTDN_PUSH_SERVICE_ACCOUNT
+            - name: DISABLE_PLAY_VERIFICATION
+              value: "false"
+          volumeMounts:
+            - name: play-sa
+              mountPath: /secrets
+              readOnly: true
           resources:
             requests:
               cpu: 100m
@@ -47,3 +68,7 @@ spec:
             limits:
               cpu: 500m
               memory: 512Mi
+      volumes:
+        - name: play-sa
+          secret:
+            secretName: fishky-play-sa
