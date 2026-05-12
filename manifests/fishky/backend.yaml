@@ -47,6 +47,11 @@ spec:
             # just tells play_billing_service._get_service() where to find it.
             - name: GOOGLE_PLAY_SERVICE_ACCOUNT_FILE
               value: "/secrets/play-sa.json"
+            # Required by Google libraries (including Firebase SDK).
+            # Currently points to the same key as billing, but in the future
+            # it could be a dedicated file like /secrets/firebase-adminsdk.json from Firebase Console.
+            - name: GOOGLE_APPLICATION_CREDENTIALS
+              value: "/secrets/play-sa.json"
             # Package name = Android applicationId from frontend/android/app/build.gradle
             # (NOT the Kotlin namespace "com.fishky.fishky" — that's unrelated).
             - name: GOOGLE_PLAY_PACKAGE_NAME
