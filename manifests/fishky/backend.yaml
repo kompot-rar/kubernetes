@@ -72,9 +72,14 @@ spec:
             # RuntimeError if any of the three vars above are empty while this is false.
             - name: DISABLE_PLAY_VERIFICATION
               value: "false"
+            - name: FIREBASE_ADMIN_CREDENTIALS
+              value: /firebase-secrets/firebase-sa.json
           volumeMounts:
             - name: play-sa
               mountPath: /secrets
+              readOnly: true
+            - name: firebase-sa
+              mountPath: /firebase-secrets
               readOnly: true
           resources:
             requests:
@@ -103,6 +108,9 @@ spec:
         - name: play-sa
           secret:
             secretName: fishky-play-sa
+        - name: firebase-sa
+          secret:
+            secretName: firebase-admin-sa
 ---
 apiVersion: v1
 kind: Service
