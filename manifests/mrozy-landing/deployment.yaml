@@ -1,0 +1,29 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mrozy-landing
+  namespace: mrozy-landing
+  labels:
+    app: mrozy-landing
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: mrozy-landing
+  template:
+    metadata:
+      labels:
+        app: mrozy-landing
+    spec:
+      containers:
+      - name: landing
+        image: 10.0.20.50:5000/mrozy-landing:latest
+        ports:
+        - containerPort: 80
+        resources:
+          limits:
+            cpu: "100m"
+            memory: "128Mi"
+          requests:
+            cpu: "50m"
+            memory: "64Mi"
