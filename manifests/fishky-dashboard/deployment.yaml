@@ -24,8 +24,6 @@ spec:
         app: dashboard
     spec:
       serviceAccountName: dashboard
-      imagePullSecrets:
-        - name: ghcr-secret
       securityContext:
         runAsNonRoot: true
         runAsUser: 10001
@@ -33,7 +31,7 @@ spec:
         fsGroup: 10001
       containers:
         - name: dashboard
-          image: ghcr.io/kompot-rar/fishky-dashboard:latest
+          image: 10.0.20.50:5000/fishky-dashboard:latest
           imagePullPolicy: Always
           ports:
             - containerPort: 8000
