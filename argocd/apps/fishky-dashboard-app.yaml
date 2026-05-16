@@ -1,0 +1,20 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: fishky-dashboard
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/kompot-rar/kubernetes.git
+    targetRevision: HEAD
+    path: manifests/fishky-dashboard
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: fishky
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=false  # ns 'fishky' already exists from fishky-backend app

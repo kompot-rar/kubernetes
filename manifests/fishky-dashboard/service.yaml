@@ -1,0 +1,27 @@
+# NodePort — dashboard dostępny w LAN homelaba pod każdym IP node'a klastra
+# na porcie 30330.  Konwencja jak ArgoCD (NodePort 30329).
+#
+# Dostęp:
+#   http://10.0.20.10:30330
+#
+# Brak auth — security przez izolację VLAN'a.  Jeśli kiedyś zechcesz
+# dorzucić basic auth, patrz docs w dashboard/README.md sekcja "Roadmap".
+apiVersion: v1
+kind: Service
+metadata:
+  name: dashboard
+  namespace: fishky
+  labels:
+    app: dashboard
+    app.kubernetes.io/name: fishky-dashboard
+    app.kubernetes.io/part-of: fishky
+spec:
+  type: NodePort
+  selector:
+    app: dashboard
+  ports:
+    - name: http
+      port: 80
+      targetPort: 8000
+      nodePort: 30330
+      protocol: TCP

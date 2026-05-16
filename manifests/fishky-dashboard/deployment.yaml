@@ -1,0 +1,80 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: dashboard
+  namespace: fishky
+  labels:
+    app: dashboard
+    app.kubernetes.io/name: fishky-dashboard
+    app.kubernetes.io/part-of: fishky
+spec:
+  # Single replica is intentional:
+  # - dashboard is admin-only, low QPS (operator looking at the page)
+  # - in-memory cache works best with one process (per-pod TTL cache)
+  # - any restart is a few seconds of "loading…" — acceptable
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: dashboard
+  template:
+    metadata:
+      labels:
+        app: dashboard
+    spec:
+      serviceAccountName: dashboard
+      imagePullSecrets:
+        - name: ghcr-secret
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
+      containers:
+        - name: dashboard
+          image: ghcr.io/kompot-rar/fishky-dashboard:latest
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 8000
+              name: http
+          env:
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: fishky-dashboard-secrets
+                  key: DATABASE_URL
+            - name: ENABLE_KUBERNETES_WIDGET
+              value: "true"
+            - name: KUBERNETES_NAMESPACE
+              value: fishky
+            - name: CACHE_TTL_SECONDS
+              value: "60"
+            - name: NO_DOCS
+              value: "1"
+          resources:
+            requests:
+              cpu: 50m
+              memory: 128Mi
+            limits:
+              cpu: 300m
+              memory: 256Mi
+          livenessProbe:
+            httpGet:
+              path: /api/health
+              port: 8000
+            initialDelaySeconds: 10
+            periodSeconds: 30
+            timeoutSeconds: 3
+          readinessProbe:
+            httpGet:
+              path: /api/health
+              port: 8000
+            initialDelaySeconds: 3
+            periodSeconds: 10
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL

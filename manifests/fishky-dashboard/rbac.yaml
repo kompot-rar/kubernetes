@@ -1,0 +1,53 @@
+# RBAC for the dashboard's Kubernetes widget.
+# Strictly read-only, scoped to the fishky namespace.
+# If we ever need to inspect more namespaces or restart pods,
+# that's a deliberate role expansion, not a default.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: dashboard
+  namespace: fishky
+  labels:
+    app.kubernetes.io/name: fishky-dashboard
+    app.kubernetes.io/part-of: fishky
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: dashboard-reader
+  namespace: fishky
+  labels:
+    app.kubernetes.io/name: fishky-dashboard
+    app.kubernetes.io/part-of: fishky
+rules:
+  - apiGroups: [""]
+    resources: ["pods", "services", "events"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["apps"]
+    resources: ["deployments", "replicasets", "statefulsets"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["autoscaling"]
+    resources: ["horizontalpodautoscalers"]
+    verbs: ["get", "list", "watch"]
+  # Pod logs are NOT included by default — uncomment to enable a future
+  # "tail logs" widget; that's an intentional later choice, not now.
+  # - apiGroups: [""]
+  #   resources: ["pods/log"]
+  #   verbs: ["get"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: dashboard-reader
+  namespace: fishky
+  labels:
+    app.kubernetes.io/name: fishky-dashboard
+    app.kubernetes.io/part-of: fishky
+subjects:
+  - kind: ServiceAccount
+    name: dashboard
+    namespace: fishky
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: dashboard-reader
