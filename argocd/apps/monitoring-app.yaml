@@ -24,7 +24,7 @@ spec:
         prometheus:
           prometheusSpec:
             retention: 31d
-            retentionSize: 20GB
+            retentionSize: 42GB
             serviceMonitorSelectorNilUsesHelmValues: false
             probeSelectorNilUsesHelmValues: false
 
@@ -52,7 +52,7 @@ spec:
                   accessModes: ["ReadWriteOnce"]
                   resources:
                     requests:
-                      storage: 40Gi
+                      storage: 50Gi
             
         prometheusOperator:
           admissionWebhooks:
