@@ -1,0 +1,37 @@
+# fishky-front landing page — Next.js standalone (server.js on port 3000)
+#
+# Image built on Kuźnia (10.0.20.50) and pushed to local registry.
+# RESEND_API_KEY + RESEND_AUDIENCE_ID injected at runtime via Secret
+# (used by /api/subscribe endpoint for newsletter signups).
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: fishky-front
+  namespace: fishky-front
+  labels:
+    app: fishky-front
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: fishky-front
+  template:
+    metadata:
+      labels:
+        app: fishky-front
+    spec:
+      containers:
+      - name: fishky-front
+        image: 10.0.20.50:5000/fishky-front:latest
+        ports:
+        - containerPort: 3000
+        envFrom:
+        - secretRef:
+            name: fishky-front-secrets
+        resources:
+          requests:
+            cpu: 50m
+            memory: 128Mi
+          limits:
+            cpu: 200m
+            memory: 256Mi

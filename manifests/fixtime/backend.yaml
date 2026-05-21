@@ -1,0 +1,66 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: fixtime-backend
+  namespace: fixtime
+  labels:
+    app: fixtime-backend
+spec:
+  ports:
+    - port: 8080
+      targetPort: 8080
+      name: http
+  selector:
+    app: fixtime-backend
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: fixtime-backend
+  namespace: fixtime
+  labels:
+    app: fixtime-backend
+spec:
+  replicas: 1 # Single replica to handle in-memory WebSockets pub-sub for our small workshop setup without needing a Redis message broker
+  selector:
+    matchLabels:
+      app: fixtime-backend
+  template:
+    metadata:
+      labels:
+        app: fixtime-backend
+    spec:
+      containers:
+        - name: backend
+          image: 10.0.20.50:5000/fixtime-backend:latest
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 8080
+              name: http
+          env:
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: fixtime-secrets
+                  key: DATABASE_URL
+            - name: PORT
+              value: "8080"
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: 200m
+              memory: 128Mi
+          livenessProbe:
+            httpGet:
+              path: /api/health
+              port: 8080
+            initialDelaySeconds: 10
+            periodSeconds: 20
+          readinessProbe:
+            httpGet:
+              path: /api/health
+              port: 8080
+            initialDelaySeconds: 3
+            periodSeconds: 10
