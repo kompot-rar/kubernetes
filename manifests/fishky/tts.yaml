@@ -1,0 +1,109 @@
+# ------------------------------------------------------------------------------
+# Fishky TTS — Supertonic 3 on-device synthesis pod.
+#
+# Internal-only (ClusterIP, no Ingress).  Only `fishky-backend`
+# talks to it via TTS_SERVICE_URL=http://tts.fishky.svc.cluster.local:7788.
+# Frontend never reaches this pod directly — it goes through `/api/tts`
+# which authenticates with JWT + Firebase App Check first.
+#
+# Resource sizing rationale:
+#   * Model in memory ≈400MB (ONNX modules + voice styles).  We give
+#     the pod 1Gi request / 2Gi limit so a runaway request can't OOM.
+#   * Synthesis uses a single ONNX session per process (serialized).
+#     1 CPU request / 2 CPU limit is plenty for the home-widget use
+#     case (≤30 req/min/user × small userbase).
+#   * 1 replica.  HPA off — TTS load is spiky-but-low; auto-scaling
+#     would just thrash on a homelab where pulling 1.5GB of image to
+#     a new node takes longer than just queueing requests.
+#
+# Image refresh:
+#   docker build -t ghcr.io/kompot-rar/fishky-tts:<tag> /projekty/fishky/tts
+#   docker push ghcr.io/kompot-rar/fishky-tts:<tag>
+#   # then bump `image:` below + git push to this repo → ArgoCD syncs
+# ------------------------------------------------------------------------------
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: tts
+  namespace: fishky
+spec:
+  replicas: 1
+  strategy:
+    # Recreate, not rolling — model load takes ~10s and we don't want
+    # two pods holding 800MB during the swap on a homelab node.
+    type: Recreate
+  selector:
+    matchLabels:
+      app: tts
+  template:
+    metadata:
+      labels:
+        app: tts
+    spec:
+      imagePullSecrets:
+        - name: ghcr-secret
+      containers:
+        - name: tts
+          image: ghcr.io/kompot-rar/fishky-tts:0.1.0
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 7788
+              name: http
+          # No env vars needed — the Supertonic model + voices are baked
+          # into the image at build time.  See /projekty/fishky/tts/Dockerfile.
+          resources:
+            requests:
+              cpu: "200m"
+              memory: "1Gi"
+            limits:
+              cpu: "2"
+              memory: "2Gi"
+          # GET /v1/styles is a cheap "is the engine loaded?" probe — it
+          # returns the voice catalogue from RAM, no synthesis triggered.
+          startupProbe:
+            httpGet:
+              path: /v1/styles
+              port: 7788
+            # Cold start: model load from baked image cache ≈10s.
+            # Allow up to 60s before liveness kicks in.
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            failureThreshold: 12
+          livenessProbe:
+            httpGet:
+              path: /v1/styles
+              port: 7788
+            periodSeconds: 30
+            timeoutSeconds: 5
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /v1/styles
+              port: 7788
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 2
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 1000
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: false  # supertonic writes to ~/.cache at runtime
+            capabilities:
+              drop: ["ALL"]
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: tts
+  namespace: fishky
+  labels:
+    app: tts
+spec:
+  type: ClusterIP
+  selector:
+    app: tts
+  ports:
+    - name: http
+      port: 7788
+      targetPort: 7788
+      protocol: TCP

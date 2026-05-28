@@ -8,6 +8,7 @@ resources:
   - redis.yaml
   - backend.yaml
   - worker.yaml
+  - tts.yaml
   - ingress.yaml
   # Secret NIE jest tutaj — zarządzany ręcznie (kubectl apply) poza ArgoCD.
   # Nie commituj prawdziwych haseł do gita.
