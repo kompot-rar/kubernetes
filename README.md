@@ -15,11 +15,15 @@ The goal of this project is to build a highly available, production-ready Kubern
     *   **K3s Installation**: High Availability setup with 3 Control Plane nodes and etcd.
     *   **Kube-VIP**: Floating IP (VIP) configuration for Control Plane High Availability.
     *   **ArgoCD Bootstrap**: Initializing GitOps for continuous delivery.
-*   **`apps/`**: Kubernetes manifests and application configurations managed via GitOps:
+*   **`manifests/`**: Kubernetes manifests and application configurations managed via GitOps:
     *   **Blog (Dev/Prod)**: Multi-environment deployment of the project's blog.
-    *   **Fishky**: Android flashcard app used to practice multi-container orchestration (Backend, Redis, Workers).
+    *   **Fishky**: Android flashcard app used to practice multi-container orchestration (Backend, Redis, Workers, and a local Python/ONNX TTS synthesis engine).
+    *   **Fishky Frontend**: React-based web interface for the flashcard app, facilitating responsive deck management.
+    *   **Fishky Dashboard**: Administration panel utilizing custom Kubernetes ServiceAccounts and RBAC permissions to monitor cluster-level worker queue status and backend resources.
+    *   **Fixtime**: Time-tracking system featuring a Go backend using WebSockets (single-replica deployment) and a dedicated PostgreSQL instance backed by high-performance SSD storage.
     *   **Forgejo**: Private Git server for learning Helm automation and stateful app persistence.
-    *   **NFS Provisioner**: NAS-to-cluster bridge used to learn StorageClasses and PV lifecycles.
+    *   **Mrozy Landing**: A client landing page deployed as a dual-replica web application to demonstrate high-availability patterns for static/semi-static content.
+    *   **NFS Provisioners (HDD & SSD)**: Storage-class bridges separating HDD storage (`nfs-client`) from SSD storage (`nfs-client-ssd`) to learn multi-tier PV lifecycles and latency optimization for databases.
     *   **Traefik**: Ingress Controller for routing external traffic.
     *   **Cloudflared**: Secure tunnel for external access.
     *   **Prometheus Stack**: Full observability solution collecting metrics from K3s nodes and Proxmox hosts.
