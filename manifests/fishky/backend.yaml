@@ -12,6 +12,11 @@ spec:
     metadata:
       labels:
         app: backend
+      annotations:
+        # Bump this on every new :latest push so ArgoCD sees a manifest diff
+        # and rolls the pods (otherwise an unchanged :latest tag never
+        # redeploys).  Value is just a marker — date + short reason.
+        fishky.deploy/revision: "2026-05-30-tts-deck-audio"
     spec:
       imagePullSecrets:
         - name: ghcr-secret
