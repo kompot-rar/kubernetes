@@ -21,7 +21,7 @@ metadata:
   labels:
     app: fixtime-backend
 spec:
-  replicas: 1 # Single replica to handle in-memory WebSockets pub-sub for our small workshop setup without needing a Redis message broker
+  replicas: 0 # Scaled down to 0 to save resources in our homelab. (Originally 1 to handle in-memory WebSockets)
   selector:
     matchLabels:
       app: fixtime-backend
