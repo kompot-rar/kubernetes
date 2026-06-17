@@ -1,0 +1,81 @@
+# One-shot migration Job for krakweek backend.
+# - Runs once on cluster bootstrap (and on any change to the migration files).
+# - Image: 10.0.20.50:5000/krakweek-backend:dev — Kuźnia local registry mirror.
+#   T5 (CI pipeline) will bump the tag to the real build artifact in Faza 1.5.
+# - backoffLimit: 3 — if goose.Up fails 3 times in a row, Job goes to Failed.
+#   ArgoCD will not retry automatically; operator must investigate.
+# - restartPolicy: Never — on failure the pod terminates, Job controller
+#   schedules a fresh pod with the same image. Never restarts the failed
+#   process in place (which would just hit the same error again).
+# - imagePullSecrets: ghcr-secret — Kuźnia is the primary mirror, but the
+#   fallback path uses ghcr.io/kompot-rar/krakweek-backend. Both pull
+#   from the same secret; cluster operator must ensure ghcr-secret
+#   exists in the krakweek namespace (see README for setup command).
+# - The job runs /migrate from the backend image (T12 — see
+#   backend/Dockerfile, which builds ./cmd/migrate with the same flags
+#   as /api and /healthcheck). The binary reads DATABASE_URL, opens
+#   a pgx pool, and applies any pending migrations using the embedded
+#   migration filesystem (go:embed in internal/db/migrate.go). Idempotent:
+#   re-running on a fully-migrated database is a no-op and exits 0,
+#   so the Job is safe to run on every release.
+# - GOOSE_DRIVER and GOOSE_MIGRATION_DIR are leftover from the original
+#   goose-CLI design and are ignored by the Go-based binary. They are
+#   left in place intentionally to keep the diff small; cleanup is
+#   tracked as a follow-up.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: krakweek-migrate
+  namespace: krakweek
+  labels:
+    app.kubernetes.io/name: krakweek-migrate
+    app.kubernetes.io/component: migration
+    app.kubernetes.io/part-of: krakweek
+spec:
+  backoffLimit: 3
+  ttlSecondsAfterFinished: 3600
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: krakweek-migrate
+        app.kubernetes.io/component: migration
+    spec:
+      restartPolicy: Never
+      imagePullSecrets:
+        - name: ghcr-secret
+      initContainers:
+        - name: wait-for-postgres
+          image: postgres:16-alpine
+          command:
+            - sh
+            - -c
+            - |
+              set -eu
+              echo "Waiting for postgres:5432 to be reachable..."
+              until pg_isready -h postgres -p 5432 -U postgres; do
+                echo "postgres not ready, retrying in 2s..."
+                sleep 2
+              done
+              echo "postgres is ready."
+      containers:
+        - name: migrate
+          image: 10.0.20.50:5000/krakweek-backend:dev
+          imagePullPolicy: Always
+          command: ["/migrate"]
+          env:
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: krakweek-secrets
+                  key: DATABASE_URL
+            - name: GOOSE_DRIVER
+              value: postgres
+            - name: GOOSE_MIGRATION_DIR
+              value: /app/migrations
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: 200m
+              memory: 256Mi

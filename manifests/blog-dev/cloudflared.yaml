@@ -13,6 +13,8 @@ data:
         service: http://blog-devops-dev.blog.svc.cluster.local:80
       - hostname: devops.mrozy.org
         service: http://blog-devops-service.blog-prod.svc.cluster.local:80
+      - hostname: api.krakweek.mrozy.org
+        service: http://backend.krakweek.svc.cluster.local:8080
       - service: http_status:404
 ---
 apiVersion: apps/v1

@@ -1,0 +1,8 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: krakweek
+  labels:
+    app.kubernetes.io/name: krakweek
+    app.kubernetes.io/part-of: krakweek
+    app.kubernetes.io/managed-by: argocd

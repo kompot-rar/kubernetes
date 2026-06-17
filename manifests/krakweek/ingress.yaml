@@ -1,0 +1,44 @@
+# Traefik Ingress for krakweek backend.
+# - Host: api.krakweek.mrozy.org — placeholder hostname. Operator must add a
+#   public DNS A/AAAA record pointing to the kube-vip Traefik
+#   loadBalancerIP (10.0.20.20) before Let's Encrypt HTTP-01 challenge
+#   can succeed. Until then the cert stays in "pending" state — Traefik
+#   still routes HTTP traffic, just without TLS termination.
+# - Traefik annotations: router.entrypoints=websecure forces HTTPS,
+#   router.tls=true enables TLS termination at the edge.
+# - cert-manager.io/cluster-issuer: letsencrypt-prod — uses the
+#   cluster-wide ClusterIssuer that should be installed via Helm in Faza 1.
+#   If the issuer is not yet installed, the cert will sit in "pending"
+#   state but the rest of the manifest is still valid.
+# - TLS termination: cert-manager creates a Secret named "krakweek-tls"
+#   containing the issued cert + key; Traefik reads it automatically.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: backend
+  namespace: krakweek
+  labels:
+    app.kubernetes.io/name: backend
+    app.kubernetes.io/component: api
+    app.kubernetes.io/part-of: krakweek
+  annotations:
+    traefik.ingress.kubernetes.io/router.entrypoints: websecure
+    traefik.ingress.kubernetes.io/router.tls: "true"
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+spec:
+  ingressClassName: traefik
+  tls:
+    - hosts:
+        - api.krakweek.mrozy.org
+      secretName: krakweek-tls
+  rules:
+    - host: api.krakweek.mrozy.org
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: backend
+                port:
+                  number: 8080
