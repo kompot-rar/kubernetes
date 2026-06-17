@@ -1,5 +1,5 @@
 # Traefik Ingress for krakweek backend.
-# - Host: api.krakweek.mrozy.org — placeholder hostname. Operator must add a
+# - Host: apikrakweek.mrozy.org — placeholder hostname. Operator must add a
 #   public DNS A/AAAA record pointing to the kube-vip Traefik
 #   loadBalancerIP (10.0.20.20) before Let's Encrypt HTTP-01 challenge
 #   can succeed. Until then the cert stays in "pending" state — Traefik
@@ -29,10 +29,10 @@ spec:
   ingressClassName: traefik
   tls:
     - hosts:
-        - api.krakweek.mrozy.org
+        - apikrakweek.mrozy.org
       secretName: krakweek-tls
   rules:
-    - host: api.krakweek.mrozy.org
+    - host: apikrakweek.mrozy.org
       http:
         paths:
           - path: /
